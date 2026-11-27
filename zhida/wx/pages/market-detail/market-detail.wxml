@@ -1,0 +1,46 @@
+<view class="page page--plain detail" wx:if="{{item}}">
+  <view class="hero">
+    <view class="hero__row">
+      <view class="zd-title" style="margin:0;max-width:72%">{{item.title}}</view>
+      <text class="status">{{item.domainLabel}}</text>
+    </view>
+    <view class="zd-muted meta">{{item.moduleCount}} 个学习阶段 · 用过 {{item.useCount}}</view>
+    <view class="zd-body" wx:if="{{item.overview}}">{{item.overview}}</view>
+  </view>
+
+  <view class="zd-sec" wx:if="{{item.scenarios.length}}">
+    <view class="zd-sec__head">使用场景</view>
+    <view class="line" wx:for="{{item.scenarios}}" wx:key="*this">{{item}}</view>
+  </view>
+
+  <view class="zd-sec" wx:if="{{item.resources.length}}">
+    <view class="zd-sec__head">资料</view>
+    <view class="res" wx:for="{{item.resources}}" wx:key="title">
+      <view class="res__main">
+        <view class="res__title">{{item.title}}</view>
+        <view class="zd-muted">{{item.note || item.type || ''}}</view>
+      </view>
+      <text class="link" wx:if="{{item.url}}" data-url="{{item.url}}" catch:tap="onCopyUrl">复制</text>
+    </view>
+  </view>
+
+  <view class="zd-sec" wx:for="{{item.modules}}" wx:key="key">
+    <view class="stage-head">
+      <view class="zd-sec__head" style="margin:0">第 {{item.stageNo}} 阶段 · {{item.name}}</view>
+      <text class="zd-muted">{{item.difficultyLabel}}</text>
+    </view>
+    <view class="zd-body learn" wx:if="{{item.learn}}">{{item.learn}}</view>
+    <view class="skills" wx:if="{{item.skillsText}}">技能点 · {{item.skillsText}}</view>
+    <view class="mat" wx:for="{{item.materials}}" wx:for-item="mat" wx:key="title">
+      <view class="mat__main">
+        <view class="mat__title">{{mat.title}}</view>
+        <view class="zd-muted" wx:if="{{mat.note}}">{{mat.note}}</view>
+      </view>
+      <text class="link" wx:if="{{mat.url}}" data-url="{{mat.url}}" catch:tap="onCopyUrl">复制</text>
+    </view>
+  </view>
+
+  <view class="foot">
+    <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onUse" loading="{{using}}">选用此技能</button>
+  </view>
+</view>

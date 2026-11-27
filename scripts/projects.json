@@ -1,0 +1,61 @@
+{
+  "workspace": "ai_work",
+  "projects": [
+    {
+      "id": "piaoqi",
+      "name": "票齐",
+      "slogan": "票一拍，齐入表",
+      "type": "miniprogram",
+      "path": "piaoqi",
+      "port": 7101,
+      "start": null,
+      "doc": "piaoqi/doc/product-design.md",
+      "note": "发票单据整理成表；服务未就绪时仅文档可阅"
+    },
+    {
+      "id": "zhida",
+      "name": "学习目标规划",
+      "slogan": "拆模块，日日推进",
+      "type": "miniprogram",
+      "path": "zhida",
+      "port": 8000,
+      "start": {
+        "cwd": "zhida/server",
+        "command": "d:\\code\\ai_work\\zhida\\server\\.venv\\Scripts\\uvicorn.exe",
+        "args": ["app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+      },
+      "doc": "zhida/doc/product-design.md",
+      "note": "小程序 zhida/wx + FastAPI/MySQL；默认 http://127.0.0.1:8000"
+    },
+    {
+      "id": "luyang",
+      "name": "拼车狂飙",
+      "slogan": "撞车越撞越大",
+      "type": "minigame",
+      "path": "luyang",
+      "port": 7103,
+      "start": {
+        "cwd": "luyang",
+        "command": "node",
+        "args": ["tools/serve.js", "7103"]
+      },
+      "doc": "luyang/doc/product-design.md",
+      "note": "拼装公路可玩：撞装/星级/背包商城/自行车技能"
+    },
+    {
+      "id": "game_live",
+      "name": "森林求生",
+      "slogan": "单指拖动，活到天亮",
+      "type": "minigame",
+      "path": "game_live",
+      "port": 8080,
+      "start": {
+        "cwd": "game_live",
+        "command": "node",
+        "args": ["tools/serve.js", "8080"]
+      },
+      "doc": "game_live/doc/game-design-spec.md",
+      "note": "H5 / 微信小游戏可玩原型"
+    }
+  ]
+}

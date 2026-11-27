@@ -1,0 +1,137 @@
+/* 我的 · 设置分区：与目标页同一套 mast + sheet，按学习偏好 / 协作 / 账户编排 */
+
+.mine {
+  padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom) + 48rpx);
+}
+
+.mast {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-bottom: 36rpx;
+  padding-bottom: 28rpx;
+  border-bottom: 1rpx solid var(--border);
+}
+
+.mast--guest {
+  display: block;
+  padding-bottom: 32rpx;
+}
+
+.mast__title {
+  font-size: 48rpx;
+  font-weight: 650;
+  letter-spacing: -1rpx;
+  color: var(--ink-1);
+  line-height: 1.05;
+  margin-bottom: 10rpx;
+}
+
+.mast__sub {
+  font-size: 24rpx;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
+.mast__time {
+  flex-shrink: 0;
+  min-width: 120rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 20rpx;
+  background: var(--accent-soft);
+  text-align: center;
+}
+
+.mast__time-n {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.mast__time-l {
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.block {
+  margin-bottom: 32rpx;
+}
+
+.block__head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin: 0 4rpx 14rpx;
+}
+
+.block__no {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 10rpx;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 20rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.block__name {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.sheet {
+  background: var(--bg);
+  border-radius: 28rpx;
+  padding: 0 22rpx;
+  box-shadow: var(--shadow);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  min-height: 96rpx;
+  padding: 8rpx 4rpx;
+  border-bottom: 1rpx solid var(--border);
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  font-weight: 560;
+  color: var(--ink-1);
+  line-height: 1.3;
+}
+
+.row__val {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.row__chev {
+  flex-shrink: 0;
+  font-size: 32rpx;
+  color: var(--ink-3);
+  line-height: 1;
+  opacity: 0.65;
+}
+
+.row--danger .row__title {
+  color: var(--ink-2);
+}

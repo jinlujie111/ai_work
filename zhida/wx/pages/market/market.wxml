@@ -1,0 +1,54 @@
+<view class="page market">
+  <view class="head">
+    <view class="head__title">技能市场</view>
+  </view>
+
+  <view class="search">
+    <input
+      class="search__input"
+      placeholder="搜索技能"
+      value="{{keyword}}"
+      bindinput="onSearch"
+      confirm-type="search"
+      bindconfirm="onRefresh"
+    />
+  </view>
+
+  <scroll-view scroll-x class="domains" enable-flex>
+    <view
+      class="dom {{domain === item.key ? 'dom--on' : ''}}"
+      wx:for="{{categories}}"
+      wx:key="key"
+      data-domain="{{item.key}}"
+      bind:tap="onDomain"
+    >
+      <text class="dom__lab">{{item.label}}</text>
+      <text class="dom__n" wx:if="{{item.count}}">{{item.count}}</text>
+    </view>
+  </scroll-view>
+
+  <view class="list" wx:if="{{items.length}}">
+    <view class="card" wx:for="{{items}}" wx:key="id" data-id="{{item.id}}" bind:tap="onOpen">
+      <view class="card__top">
+        <view class="card__title">{{item.title}}</view>
+        <text class="card__tag">{{item.domainLabel}}</text>
+      </view>
+      <view class="card__meta">{{item.moduleCount}} 阶段 · 用过 {{item.useCount}}</view>
+      <view class="card__overview">{{item.overview}}</view>
+      <view class="card__foot">
+        <text class="card__link">查看详情</text>
+        <button
+          class="card__btn"
+          size="mini"
+          data-id="{{item.id}}"
+          catch:tap="onUse"
+          loading="{{usingId === item.id}}"
+        >选用</button>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty" wx:else>
+    <view class="empty__title">{{loading ? '加载中…' : '暂无技能'}}</view>
+  </view>
+</view>

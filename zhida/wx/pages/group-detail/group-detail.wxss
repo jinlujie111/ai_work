@@ -1,0 +1,77 @@
+.hero {
+  margin-bottom: 20rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid var(--border);
+}
+
+.code-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 12rpx;
+}
+
+.code {
+  font-size: 28rpx;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-1);
+}
+
+.link {
+  font-size: 24rpx;
+  color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 28rpx;
+}
+
+.actions .zd-btn {
+  margin: 0;
+}
+
+.mem {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 0;
+  border-top: 1rpx solid var(--border);
+}
+
+.mem__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mem__name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--ink-1);
+  margin-bottom: 4rpx;
+}
+
+.mem__stat {
+  flex-shrink: 0;
+  font-size: 26rpx;
+  color: var(--ink-2);
+  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.dot--on {
+  background: var(--accent);
+}

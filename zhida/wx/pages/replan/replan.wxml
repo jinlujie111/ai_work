@@ -1,0 +1,39 @@
+<view class="page page--plain">
+  <view class="zd-card">
+    <view class="zd-title">为什么没完成？</view>
+    <view class="reasons">
+      <view
+        class="reason {{reason === item ? 'reason--on' : ''}}"
+        wx:for="{{reasonOptions}}"
+        wx:key="*this"
+        data-v="{{item}}"
+        bind:tap="onPickReason"
+      >{{item}}</view>
+    </view>
+    <textarea
+      class="area"
+      placeholder="补充（可选）"
+      value="{{note}}"
+      bindinput="onNote"
+      maxlength="200"
+      auto-height
+    />
+    <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onDraft" loading="{{loading}}">生成方案</button>
+  </view>
+
+  <block wx:if="{{draft}}">
+    <view class="zd-card" wx:if="{{draft.analysis.summary}}">
+      <view class="zd-body">{{draft.analysis.summary}}</view>
+    </view>
+
+    <view class="zd-card">
+      <view class="diff" wx:for="{{diffs}}" wx:key="id">
+        <view class="diff__name">{{item.name}}</view>
+        <view class="zd-muted">{{item.from}} → {{item.to}}</view>
+      </view>
+    </view>
+
+    <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onAccept">采用</button>
+    <button class="zd-btn zd-btn--ghost zd-btn--block" style="margin-top:16rpx" bind:tap="onCancel">取消</button>
+  </block>
+</view>

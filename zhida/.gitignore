@@ -1,0 +1,11 @@
+.env
+.env.local
+*.pyc
+__pycache__/
+.venv/
+venv/
+server/.venv/
+server/venv/
+*.log
+.DS_Store
+wx/project.private.config.json

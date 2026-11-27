@@ -1,0 +1,45 @@
+<view class="page page--plain skills">
+  <view class="tabs">
+    <view class="tab {{tab === 'list' ? 'tab--on' : ''}}" data-tab="list" bind:tap="onTab">列表</view>
+    <view class="tab {{tab === 'graph' ? 'tab--on' : ''}}" data-tab="graph" bind:tap="onTab">图谱</view>
+  </view>
+
+  <view class="hero">
+    <view class="zd-title">技能档案</view>
+    <view class="zd-muted" wx:if="{{limitText}}">{{limitText}}</view>
+  </view>
+
+  <block wx:if="{{tab === 'list'}}">
+    <view class="skill" wx:for="{{items}}" wx:key="id">
+      <view class="skill__top">
+        <view class="skill__name">{{item.skill_name}}</view>
+        <text class="skill__lv">L{{item.level}} {{item.level_label}}</text>
+      </view>
+      <view class="zd-muted">{{item.domain}} · {{item.source}}</view>
+      <view class="zd-body" wx:if="{{item.evidence}}" style="margin-top:10rpx">{{item.evidence}}</view>
+      <view class="ops">
+        <text class="link" data-name="{{item.skill_name}}" bind:tap="onEdit">调整程度</text>
+        <text class="link link--warn" data-id="{{item.id}}" bind:tap="onArchive">归档</text>
+      </view>
+    </view>
+    <button class="zd-btn zd-btn--primary zd-btn--block" style="margin-top:24rpx" bind:tap="onAdd">添加技能</button>
+  </block>
+
+  <block wx:else>
+    <view class="domain" wx:for="{{domains}}" wx:key="name">
+      <view class="domain__top">
+        <view class="domain__name">{{item.name}}</view>
+        <text class="zd-muted">{{item.count}} · 均 L{{item.avg_level}}</text>
+      </view>
+      <view class="nodes">
+        <text class="node" wx:for="{{item.nodes}}" wx:for-item="n" wx:key="id">{{n.name}} L{{n.level}}</text>
+      </view>
+    </view>
+    <view class="zd-sec" wx:if="{{edges.length}}">
+      <view class="zd-sec__head">关系</view>
+      <view class="zd-muted line" wx:for="{{edges}}" wx:key="idx">{{item.label}}</view>
+    </view>
+  </block>
+
+  <button class="zd-btn zd-btn--ghost zd-btn--block" style="margin-top:24rpx" bind:tap="onExport">导出 JSON</button>
+</view>

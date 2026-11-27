@@ -1,0 +1,112 @@
+<view class="page goals">
+  <view class="mast">
+    <view class="mast__left">
+      <view class="mast__title">目标</view>
+      <view class="mast__sub">{{summaryLine}}</view>
+      <view class="mast__quota" wx:if="{{quotaLine}}">{{quotaLine}}</view>
+    </view>
+    <view class="mast__add" bind:tap="onCreate">新建</view>
+  </view>
+
+  <!-- 待确认：优先露出，确认后才进进行中 -->
+  <view class="block" wx:if="{{pendingGoals.length}}">
+    <view class="block__head">
+      <text class="block__name">待确认</text>
+      <text class="block__count">{{pendingGoals.length}}</text>
+    </view>
+    <view class="sheet">
+      <view
+        class="item item--pending"
+        wx:for="{{pendingGoals}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-status="{{item.status}}"
+        bind:tap="onOpen"
+      >
+        <view class="item__main">
+          <view class="item__title">{{item.title}}</view>
+          <view class="item__meta">截止 {{item.deadline}} · {{item.stageName}}</view>
+        </view>
+        <view class="item__go">确认</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="block">
+    <view class="block__head">
+      <text class="block__name">进行中</text>
+      <text class="block__count">{{activeGoals.length}}</text>
+      <text class="block__link" wx:if="{{activeGoals.length > 1}}" catch:tap="onAdjustPriority">调优先级</text>
+    </view>
+    <view class="sheet" wx:if="{{activeGoals.length}}">
+      <view
+        class="item"
+        wx:for="{{activeGoals}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-status="{{item.status}}"
+        bind:tap="onOpen"
+      >
+        <view class="item__main">
+          <view class="item__title">
+            <text class="item__prio" wx:if="{{activeGoals.length > 1}}">{{item.priorityLabel}}</text>
+            {{item.title}}
+          </view>
+          <view class="item__meta">{{item.stageName}} · 截止 {{item.deadline}}</view>
+          <view class="item__track">
+            <view class="item__fill" style="width: {{item.progress}}%;"></view>
+          </view>
+        </view>
+        <view class="item__pct">{{item.progress}}%</view>
+      </view>
+    </view>
+    <view class="empty" wx:else>
+      <view class="empty__link" bind:tap="onCreate" wx:if="{{!pendingGoals.length}}">去创建</view>
+    </view>
+  </view>
+
+  <view class="block" wx:if="{{pausedGoals.length}}">
+    <view class="block__head">
+      <text class="block__name">已暂停</text>
+      <text class="block__count">{{pausedGoals.length}}</text>
+    </view>
+    <view class="sheet">
+      <view
+        class="item item--paused"
+        wx:for="{{pausedGoals}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-status="{{item.status}}"
+        bind:tap="onOpen"
+      >
+        <view class="item__main">
+          <view class="item__title">{{item.title}}</view>
+          <view class="item__meta">截止 {{item.deadline}}</view>
+        </view>
+        <view class="item__go">恢复</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="block" wx:if="{{otherGoals.length}}">
+    <view class="block__head">
+      <text class="block__name">已结束</text>
+      <text class="block__count">{{otherGoals.length}}</text>
+    </view>
+    <view class="sheet sheet--quiet">
+      <view
+        class="item item--quiet"
+        wx:for="{{otherGoals}}"
+        wx:key="id"
+        data-id="{{item.id}}"
+        data-status="{{item.status}}"
+        bind:tap="onOpen"
+      >
+        <view class="item__main">
+          <view class="item__title">{{item.title}}</view>
+          <view class="item__meta">{{item.statusLabel}} · {{item.deadline}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

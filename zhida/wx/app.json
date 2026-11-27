@@ -1,0 +1,70 @@
+{
+  "pages": [
+    "pages/today/today",
+    "pages/calendar/calendar",
+    "pages/goals/goals",
+    "pages/market/market",
+    "pages/market-detail/market-detail",
+    "pages/mine/mine",
+    "pages/goal-create/goal-create",
+    "pages/plan-confirm/plan-confirm",
+    "pages/goal-detail/goal-detail",
+    "pages/replan/replan",
+    "pages/review/review",
+    "pages/skills/skills",
+    "pages/membership/membership",
+    "pages/groups/groups",
+    "pages/group-detail/group-detail",
+    "pages/group-join/group-join",
+    "pages/template-join/template-join"
+  ],
+  "window": {
+    "navigationBarTitleText": "学习者",
+    "navigationBarBackgroundColor": "#101416",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#101416",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#6f7f7d",
+    "selectedColor": "#7ec4c0",
+    "backgroundColor": "#151a1c",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/today/today",
+        "text": "概览",
+        "iconPath": "assets/tab/off.png",
+        "selectedIconPath": "assets/tab/on.png"
+      },
+      {
+        "pagePath": "pages/calendar/calendar",
+        "text": "日历",
+        "iconPath": "assets/tab/off.png",
+        "selectedIconPath": "assets/tab/on.png"
+      },
+      {
+        "pagePath": "pages/goals/goals",
+        "text": "目标",
+        "iconPath": "assets/tab/off.png",
+        "selectedIconPath": "assets/tab/on.png"
+      },
+      {
+        "pagePath": "pages/market/market",
+        "text": "市场",
+        "iconPath": "assets/tab/off.png",
+        "selectedIconPath": "assets/tab/on.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "assets/tab/off.png",
+        "selectedIconPath": "assets/tab/on.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

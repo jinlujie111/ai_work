@@ -1,0 +1,32 @@
+<view class="page page--plain gdetail" wx:if="{{group}}">
+  <view class="hero">
+    <view class="zd-title">{{group.name}}</view>
+    <view class="zd-muted" wx:if="{{group.topic}}">{{group.topic}}</view>
+    <view class="code-row">
+      <text class="code">{{group.invite_code}}</text>
+      <text class="link" bind:tap="onCopyCode">复制</text>
+    </view>
+  </view>
+
+  <view class="actions">
+    <button class="zd-btn zd-btn--primary zd-btn--sm" open-type="share">分享</button>
+    <button class="zd-btn zd-btn--ghost zd-btn--sm" bind:tap="onLinkGoal">{{myLinkedGoalId ? '换目标' : '挂目标'}}</button>
+  </view>
+
+  <view class="zd-sec">
+    <view class="zd-sec__head">今日 · {{today}}</view>
+    <view class="mem" wx:for="{{members}}" wx:key="user_id">
+      <view class="mem__main">
+        <view class="mem__name">{{item.nickname}}{{item.is_me ? ' · 我' : ''}}</view>
+        <view class="zd-muted" wx:if="{{item.goal_title}}">{{item.goal_title}}</view>
+      </view>
+      <view class="mem__stat">
+        <text wx:if="{{item.has_tasks}}">{{item.today_done}}/{{item.today_total}}</text>
+        <text class="zd-muted" wx:else>—</text>
+        <view class="dot {{item.today_done_all ? 'dot--on' : ''}}" wx:if="{{item.has_tasks}}"></view>
+      </view>
+    </view>
+  </view>
+
+  <button class="zd-btn zd-btn--ghost zd-btn--block" bind:tap="onLeave">{{group.my_role === 'owner' ? '解散' : '退出'}}</button>
+</view>

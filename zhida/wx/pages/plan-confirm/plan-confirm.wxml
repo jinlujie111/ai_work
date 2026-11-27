@@ -1,0 +1,131 @@
+<view class="page confirm">
+  <view class="steps">
+    <view class="step step--done">
+      <view class="step__dot"></view>
+      <text class="step__lab">解析</text>
+    </view>
+    <view class="step__line"></view>
+    <view class="step step--on">
+      <view class="step__dot"></view>
+      <text class="step__lab">确认</text>
+    </view>
+    <view class="step__line"></view>
+    <view class="step">
+      <view class="step__dot"></view>
+      <text class="step__lab">日程</text>
+    </view>
+  </view>
+
+  <view class="card hero">
+    <view class="hero__title">{{goal.title}}</view>
+    <view class="hero__meta">{{goal.startDate}} → {{goal.deadline}} · 每天 {{goal.dailyMinutes}} 分</view>
+    <view class="hero__base" wx:if="{{goal.baseline}}">{{goal.baseline}}</view>
+  </view>
+
+  <view class="card" wx:if="{{skillOverview}}">
+    <view class="card__head">
+      <text class="card__no">一</text>
+      <text class="card__title">技能概括</text>
+    </view>
+    <view class="card__body">{{skillOverview}}</view>
+  </view>
+
+  <view class="card" wx:if="{{skillScenarios.length}}">
+    <view class="card__head">
+      <text class="card__no">二</text>
+      <text class="card__title">技能使用场景</text>
+    </view>
+    <view class="scene" wx:for="{{skillScenarios}}" wx:key="*this">
+      <view class="scene__dot"></view>
+      <text class="scene__text">{{item}}</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{modules.length}}">
+    <view class="card__head">
+      <text class="card__no">三</text>
+      <text class="card__title">学习阶段</text>
+      <text class="card__meta">已选 {{selectedCount}}/{{modules.length}}</text>
+    </view>
+
+    <view
+      class="mod {{item.selected ? 'mod--on' : ''}}"
+      wx:for="{{modules}}"
+      wx:key="key"
+      data-key="{{item.key}}"
+      bind:tap="onToggleModule"
+    >
+      <view class="mod__idx">{{item.stageNo}}</view>
+      <view class="mod__body">
+        <view class="mod__top">
+          <text class="mod__name">{{item.name}}</text>
+          <text class="mod__diff">{{item.difficultyLabel}}</text>
+        </view>
+        <view class="mod__learn" wx:if="{{item.learn}}">{{item.learn}}</view>
+        <view class="mod__skills" wx:if="{{item.skillsText}}">技能点 · {{item.skillsText}}</view>
+        <view class="mats" wx:if="{{item.materials.length}}">
+          <view class="mats__lab">学习材料</view>
+          <view class="mat" wx:for="{{item.materials}}" wx:for-item="mat" wx:key="title">
+            <text class="mat__title">{{mat.title}}</text>
+            <text class="mat__note" wx:if="{{mat.note}}">{{mat.note}}</text>
+            <text class="mat__link" wx:if="{{mat.url}}" data-url="{{mat.url}}" catch:tap="onCopyUrl">复制链接</text>
+          </view>
+        </view>
+        <view class="mod__skip" wx:if="{{item.skippable}}">可跳过</view>
+      </view>
+      <view class="mod__check {{item.selected ? 'mod__check--on' : ''}}"></view>
+    </view>
+
+    <view class="card__actions">
+      <text class="link" bind:tap="onSelectAll">全选</text>
+      <text class="link" bind:tap="onSelectNone">全不选</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{needPriority}}">
+    <view class="card__head">
+      <text class="card__no">四</text>
+      <text class="card__title">学习优先级</text>
+    </view>
+    <view class="prio" wx:for="{{priorityList}}" wx:key="id">
+      <view class="prio__rank">{{item.rank}}</view>
+      <view class="prio__body">
+        <view class="prio__title">{{item.title}}</view>
+        <view class="prio__tag" wx:if="{{item.isCurrent}}">当前草案</view>
+      </view>
+      <view class="prio__ops">
+        <text class="prio__btn {{index === 0 ? 'prio__btn--off' : ''}}" data-index="{{index}}" data-dir="up" catch:tap="onMovePriority">上</text>
+        <text class="prio__btn {{index === priorityList.length - 1 ? 'prio__btn--off' : ''}}" data-index="{{index}}" data-dir="down" catch:tap="onMovePriority">下</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="foot-space"></view>
+
+  <view class="stream-mask" wx:if="{{confirming}}" catchtouchmove="noop">
+    <view class="stream-modal">
+      <view class="stream-modal__badge">AI</view>
+      <view class="stream-modal__title">{{streamMessage || 'AI 写入日程中…'}}</view>
+      <view class="stream-modal__bar">
+        <view class="stream-modal__fill" style="width: {{streamPct}}%;"></view>
+      </view>
+      <view class="stream-modal__meta">
+        <text>{{streamPct}}%</text>
+        <text wx:if="{{streamChars}}">已生成 {{streamChars}} 字</text>
+      </view>
+      <view class="stream-modal__logs" wx:if="{{streamLogs.length}}">
+        <view class="stream-modal__log" wx:for="{{streamLogs}}" wx:key="*this">{{item}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="dock">
+    <button
+      class="dock__btn"
+      bind:tap="onConfirm"
+      loading="{{confirming}}"
+      disabled="{{confirming}}"
+    >{{confirming ? 'AI 写入日程中…' : '确认并写入日程'}}</button>
+    <text class="dock__ghost" bind:tap="onReject">放弃</text>
+  </view>
+</view>

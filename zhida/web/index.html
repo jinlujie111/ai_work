@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>学习者 · 运营看板</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="login-gate" id="loginGate">
+    <form class="login-card" id="loginForm" autocomplete="on">
+      <div class="login-brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <strong>学习者 Ops</strong>
+          <span>请登录后查看运营数据</span>
+        </div>
+      </div>
+      <label class="login-field">
+        <span>用户名</span>
+        <input id="loginUser" name="username" type="text" autocomplete="username" required />
+      </label>
+      <label class="login-field">
+        <span>密码</span>
+        <input id="loginPass" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <p class="login-err" id="loginErr" hidden></p>
+      <button type="submit" class="btn login-btn" id="loginBtn">登录</button>
+    </form>
+  </div>
+
+  <div class="shell" id="appShell" hidden>
+    <aside class="rail">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <strong>学习者 Ops</strong>
+          <span id="railUser">运营监控</span>
+        </div>
+      </div>
+      <nav class="nav">
+        <button type="button" class="nav-item is-active" data-jump="overview">总览</button>
+        <button type="button" class="nav-item" data-jump="finance">收支</button>
+        <button type="button" class="nav-item" data-jump="metrics-p0">P0 指标</button>
+        <button type="button" class="nav-item" data-jump="metrics-p1">P1 指标</button>
+        <button type="button" class="nav-item" data-jump="metrics-p2">P2 指标</button>
+        <button type="button" class="nav-item" data-jump="ai">AI 成本</button>
+      </nav>
+      <div class="rail-foot">
+        <button type="button" class="btn-ghost" id="logoutBtn">退出登录</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1>运营总览</h1>
+          <p class="sub" id="rangeLabel">加载中…</p>
+        </div>
+        <div class="top-actions">
+          <div class="seg" role="group" aria-label="时间范围">
+            <button type="button" data-days="7">7 日</button>
+            <button type="button" data-days="30" class="is-on">30 日</button>
+            <button type="button" data-days="90">90 日</button>
+          </div>
+          <button type="button" class="btn" id="refreshBtn">刷新</button>
+        </div>
+      </header>
+
+      <section id="overview" class="block">
+        <div class="kpi-grid">
+          <article class="kpi hero">
+            <div class="kpi-top">
+              <span class="chip">收入</span>
+              <span class="delta" id="profitDelta">—</span>
+            </div>
+            <div class="label">真实支付</div>
+            <div class="value" id="kpiProfit">—</div>
+            <div class="hint" id="profitHint">仅 status=paid</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-top"><span class="chip soft">测试单</span></div>
+            <div class="label">开发开通</div>
+            <div class="value" id="kpiRevenue">—</div>
+            <div class="hint" id="revenueHint">不计入收入</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-top"><span class="chip soft">LLM</span></div>
+            <div class="label">真实 Token</div>
+            <div class="value" id="kpiCost">—</div>
+            <div class="hint" id="costHint">—</div>
+          </article>
+          <article class="kpi">
+            <div class="kpi-top"><span class="chip soft">用户</span></div>
+            <div class="label">注册 / 会员</div>
+            <div class="value" id="kpiUsers">—</div>
+            <div class="hint" id="usersHint">—</div>
+          </article>
+        </div>
+      </section>
+
+      <section id="finance" class="block split">
+        <article class="panel">
+          <header class="panel-h">
+            <h2>每日收支</h2>
+            <span class="muted" id="seriesMeta">—</span>
+          </header>
+          <div class="chart" id="financeChart" role="img" aria-label="每日收入与成本折线"></div>
+          <div class="legend">
+            <span><i class="swatch rev"></i>真实收入</span>
+            <span><i class="swatch cost"></i>真实 Token</span>
+            <span><i class="swatch profit"></i>新用户</span>
+          </div>
+        </article>
+        <article class="panel">
+          <header class="panel-h"><h2>数据口径</h2></header>
+          <ul class="stack-bars" id="profitStack"></ul>
+          <div class="breakeven" id="dataQuality"></div>
+        </article>
+      </section>
+
+      <section id="metrics-p0" class="block">
+        <article class="panel">
+          <header class="panel-h">
+            <h2>P0 · 产品核心</h2>
+            <span class="muted">创建 / 确认 / 完成 / 配额 / 人均成本 / 转化</span>
+          </header>
+          <div class="metric-grid" id="p0Grid"></div>
+        </article>
+      </section>
+
+      <section id="metrics-p1" class="block">
+        <article class="panel">
+          <header class="panel-h">
+            <h2>P1 · 留存与质量</h2>
+            <span class="muted">留存 / 调整 / 技能 / 市场 / 续费</span>
+          </header>
+          <div class="metric-grid" id="p1Grid"></div>
+        </article>
+      </section>
+
+      <section id="metrics-p2" class="block">
+        <article class="panel">
+          <header class="panel-h">
+            <h2>P2 · 增长与稳定</h2>
+            <span class="muted">档案跳过 / 小组 / fallback / usage 质量</span>
+          </header>
+          <div class="metric-grid" id="p2Grid"></div>
+        </article>
+      </section>
+
+      <section id="ai" class="block split">
+        <article class="panel">
+          <header class="panel-h"><h2>AI 用途拆分</h2></header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>用途</th><th class="num">准确/总</th><th class="num">输入</th><th class="num">输出</th><th class="num">合计</th></tr>
+              </thead>
+              <tbody id="purposeBody"></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="panel">
+          <header class="panel-h"><h2>目标状态</h2></header>
+          <div class="stat-list" id="goalStats"></div>
+          <div class="bars" id="statusBars"></div>
+          <div class="table-wrap" style="margin-top:14px">
+            <table>
+              <thead>
+                <tr><th>套餐</th><th class="num">订单</th><th class="num">金额 ¥</th></tr>
+              </thead>
+              <tbody id="planBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <p class="foot-note" id="pricingNote"></p>
+    </main>
+  </div><!-- /appShell -->
+  <div class="toast" id="toast" hidden></div>
+  <script src="./app.js"></script>
+</body>
+</html>

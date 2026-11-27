@@ -1,0 +1,22 @@
+<view class="page page--plain member">
+  <view class="hero">
+    <view class="zd-title">{{statusLabel}}</view>
+    <view class="zd-muted" wx:if="{{expiresAt}}">至 {{expiresAt}}</view>
+  </view>
+
+  <view class="plan" wx:for="{{plans}}" wx:key="id">
+    <view class="plan__row">
+      <view>
+        <view class="plan__name">{{item.label}}</view>
+      </view>
+      <view class="price">{{item.price}}</view>
+    </view>
+    <button
+      class="zd-btn zd-btn--primary zd-btn--block"
+      style="margin-top:20rpx"
+      data-plan="{{item.id}}"
+      bind:tap="onActivate"
+      loading="{{loadingPlan === item.id}}"
+    >开通</button>
+  </view>
+</view>

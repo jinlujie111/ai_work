@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1510">
+<meta name="description" content="森林求生 · Deep Forest — 单指拖动，在森林里活到天亮">
+<title>森林求生 · Forest Survival</title>
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body><pre id="out" style="position:fixed;left:0;top:0;z-index:999;background:#000;color:#0f0;font:13px monospace;padding:8px;white-space:pre"></pre>
+
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="ico-berry" viewBox="0 0 24 24"><path d="M12 21.2c-4 0-6.8-2.6-6.8-5.9 0-3.1 2.7-5.3 6.8-5.3s6.8 2.2 6.8 5.3c0 3.3-2.8 5.9-6.8 5.9Z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="9.6" cy="14.4" r="1.5" fill="currentColor" opacity=".8"/><circle cx="14.2" cy="15.6" r="1.1" fill="currentColor" opacity=".55"/></symbol>
+  <symbol id="ico-gold" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" opacity=".7"/></symbol>
+  <symbol id="ico-score" viewBox="0 0 24 24"><path d="M12 3.2 14.6 8l5.2.8-3.8 3.7.9 5.2L12 15.3 7.1 17.7l.9-5.2L4.2 8.8 9.4 8Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="ico-star" viewBox="0 0 24 24"><path d="M12 3.2 14.6 8l5.2.8-3.8 3.7.9 5.2L12 15.3 7.1 17.7l.9-5.2L4.2 8.8 9.4 8Z" fill="currentColor"/></symbol>
+  <symbol id="ico-temp" viewBox="0 0 24 24"><path d="M12 3.4a2.4 2.4 0 0 1 2.4 2.4v7.3a4.6 4.6 0 1 1-4.8 0V5.8A2.4 2.4 0 0 1 12 3.4Z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="17" r="2.4" fill="currentColor" opacity=".7"/></symbol>
+</svg>
+
+<div id="app">
+  <div id="device">
+    <div id="stage">
+      <canvas id="game" width="750" height="1334"></canvas>
+
+      <!-- ── HUD（5.1 只有四个元素） ── -->
+      <div id="hud">
+        <div class="hud-top">
+          <div class="hud-left">
+            <div class="lv-no" id="lv-no">第 1 关</div>
+            <div class="lv-name" id="lv-name">学会移动</div>
+            <div class="lv-goal" id="lv-goal">采集 3 个浆果</div>
+          </div>
+          <div class="hud-center">
+            <div class="temp-wrap">
+              <div class="temp-bar"><i id="temp-fill"></i></div>
+              <div class="timer" id="timer">60</div>
+            </div>
+          </div>
+          <div class="hud-right">
+            <div class="stars-mini" id="hud-stars">
+              <svg class="ic"><use href="#ico-star"/></svg>
+              <svg class="ic"><use href="#ico-star"/></svg>
+              <svg class="ic"><use href="#ico-star"/></svg>
+            </div>
+            <div class="score-box">
+              <svg class="ic"><use href="#ico-score"/></svg><b id="score">0</b>
+            </div>
+          </div>
+        </div>
+        <div class="hud-bottom">
+          <div class="goal-box" id="goal-box">
+            <svg class="ic" id="goal-ico"><use href="#ico-berry"/></svg><b id="goal-text">0/3</b>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 选关 ── -->
+      <section class="screen" id="sc-menu">
+        <div class="scrim"></div>
+        <div class="menu-panel">
+          <header>
+            <h1>森林求生</h1>
+            <p class="menu-sub">单指拖动，活到天亮</p>
+            <p class="menu-stars">已得 <b id="total-stars">0</b> / 150 星</p>
+          </header>
+          <div class="level-grid" id="level-grid"></div>
+          <footer>
+            <button class="btn btn-mini no-drag" id="btn-sound" type="button" aria-pressed="true">音效 开</button>
+            <span class="menu-tip">夜间视野会缩小，火堆能取暖</span>
+          </footer>
+        </div>
+      </section>
+
+      <!-- ── 结算（5.4） ── -->
+      <section class="screen" id="sc-result">
+        <div class="scrim"></div>
+        <div class="result-panel">
+          <h2 id="result-title">活到天亮</h2>
+          <div class="stars" id="result-stars">
+            <svg class="ic"><use href="#ico-star"/></svg>
+            <svg class="ic"><use href="#ico-star"/></svg>
+            <svg class="ic"><use href="#ico-star"/></svg>
+          </div>
+          <ul class="star-list" id="result-conditions"></ul>
+          <p class="result-score"><b id="result-score">0</b><span>分</span></p>
+          <p class="result-extra" id="result-extra"></p>
+          <div class="btn-col">
+            <button class="btn btn-primary no-drag" id="btn-next" type="button">下一个</button>
+            <button class="btn btn-ghost no-drag" id="btn-retry" type="button">重试</button>
+            <button class="btn btn-quiet no-drag" id="btn-share" type="button">分享</button>
+            <button class="btn btn-quiet no-drag" id="btn-menu" type="button">返回选关</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script src="../src/util.js"></script>
+<script src="../src/audio.js"></script>
+<script src="../src/input.js"></script>
+<script src="../src/spec/params.js"></script>
+<script src="../src/spec/levels.js"></script>
+<script src="../src/game/entities.js"></script>
+<script src="../src/game/level.js"></script>
+<script src="../src/game/render.js"></script>
+<script src="../src/game/core.js"></script>
+<script src="../src/ui/dom.js"></script>
+<script src="../src/boot/web.js"></script>
+<script>/* 森林求生｜H5 浏览器端冒烟测试 */
+(function () {
+  var out = [], errors = [];
+  function log(s) { out.push(s); }
+  function ok(name, cond, extra) { log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? '  [' + extra + ']' : '')); }
+  window.addEventListener('error', function (e) { errors.push('ERR: ' + (e.message || e.error)); });
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+  window.addEventListener('load', function () {
+    setTimeout(run, 400);
+  });
+
+  function run() {
+    var g = window.forestSurvival;
+    function step(list) {
+      var i = 0;
+      (function next() {
+        if (i >= list.length) {
+          log('ERRORS(' + errors.length + '): ' + (errors.join(' | ') || 'none'));
+          document.getElementById('out').textContent = out.join('\n');
+          document.title = 'DONE';
+          return;
+        }
+        var s = list[i++];
+        try { s.run(); } catch (e) { log('EXCEPTION@' + s.name + ': ' + e.message); }
+        wait(s.wait || 120).then(next);
+      })();
+    }
+
+    step([
+      { name: '启动', wait: 0, run: function () {
+        ok('游戏已启动', !!g, g ? 'state=' + g.state : 'no game');
+        ok('选关界面可见', document.getElementById('sc-menu').classList.contains('active'), '');
+        ok('关卡数量', document.getElementById('level-grid').children.length === 50, document.getElementById('level-grid').children.length);
+      }},
+      { name: '开局', run: function () {
+        document.getElementsByClassName('lv')[0].click();
+      }},
+      { name: '游戏中', run: function () {
+        ok('进入第一关', g.state === 'playing' && !!g.level, 'state=' + g.state);
+        ok('HUD 显示体温条', document.getElementById('temp-fill').style.transform !== '', document.getElementById('temp-fill').style.transform);
+        ok('HUD 显示倒计时', document.getElementById('timer').textContent.length > 0, document.getElementById('timer').textContent);
+      }},
+      { name: '拖动', wait: 600, run: function () {
+        var p = g.level.player;
+        var x0 = p.x;
+        // 目标点取玩家左侧 400 设计像素（大于 120 的最大偏移，保证角色会走）
+        var tx = (p.x - 400) * DF.Input.tx.scale + DF.Input.tx.ox;
+        DF.Input.pointerDown(1, tx, 400);
+        DF.Input.pointerMove(1, tx, 400);
+        window.__x0 = x0;
+      }},
+      { name: '移动后', run: function () {
+        var p = g.level.player;
+        ok('角色随拖动移动', Math.abs(p.x - window.__x0) > 20, 'dx=' + (p.x - window.__x0).toFixed(1));
+        DF.Input.pointerUp(1);
+      }},
+      { name: '结算', run: function () {
+        g.level.finish(true, 'survive');
+      }},
+      { name: '结算态', run: function () {
+        ok('结算界面出现', document.getElementById('sc-result').classList.contains('active'), '');
+        ok('结算有星级', document.getElementById('result-stars').querySelectorAll('.ic').length === 3, '');
+        ok('进度已保存', !!g.progress.levels['1'], JSON.stringify(g.progress.levels['1']));
+      }},
+      { name: '返回选关', run: function () {
+        document.getElementById('btn-menu').click();
+      }},
+      { name: '回菜单', run: function () {
+        ok('回到选关', g.state === 'menu' && document.getElementById('sc-menu').classList.contains('active'), 'state=' + g.state);
+        ok('第一关已解锁', g.unlocked(2) === true, '');
+      }}
+    ]);
+  }
+})();</script>
+</body>
+</html>

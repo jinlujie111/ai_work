@@ -1,0 +1,23 @@
+.hero {
+  margin-bottom: 24rpx;
+}
+
+.input {
+  margin-bottom: 20rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--border);
+  font-size: 32rpx;
+  letter-spacing: 0.08em;
+}
+
+.line {
+  padding: 14rpx 0;
+  border-top: 1rpx solid var(--border);
+  font-size: 28rpx;
+  color: var(--ink-2);
+}
+
+.line__name {
+  font-weight: 600;
+  color: var(--ink-1);
+}

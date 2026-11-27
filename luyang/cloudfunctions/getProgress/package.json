@@ -1,0 +1,9 @@
+{
+  "name": "getProgress",
+  "version": "1.0.0",
+  "description": "路养 · 读取进度",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

@@ -1,0 +1,7 @@
+<view class="page page--plain">
+  <view class="hero">
+    <view class="zd-title">加入学习群</view>
+  </view>
+  <input class="input" placeholder="邀请码" value="{{code}}" bindinput="onInput" />
+  <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onJoin" loading="{{loading}}">加入</button>
+</view>

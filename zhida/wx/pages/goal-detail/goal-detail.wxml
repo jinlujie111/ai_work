@@ -1,0 +1,129 @@
+<view class="page page--plain detail" wx:if="{{goal}}">
+  <view class="hero">
+    <view class="hero__row">
+      <view class="zd-title" style="margin:0;max-width:72%">{{goal.title}}</view>
+      <text class="status">{{statusLabel}}</text>
+    </view>
+    <view class="zd-muted meta">{{goal.deadline}} 截止 · {{progress}}%</view>
+    <view class="zd-body" wx:if="{{goal.description}}">{{goal.description}}</view>
+  </view>
+
+  <view class="zd-sec" wx:if="{{learningPath.knowledge.length}}">
+    <view class="zd-sec__head">学什么</view>
+    <view class="line" wx:for="{{learningPath.knowledge}}" wx:key="*this">{{item}}</view>
+    <block wx:if="{{learningPath.frameworks.length}}">
+      <view class="zd-sec__head sub">框架</view>
+      <view class="line" wx:for="{{learningPath.frameworks}}" wx:key="name">{{item.name}}</view>
+    </block>
+  </view>
+
+  <view class="zd-sec" wx:if="{{resources.length}}">
+    <view class="zd-sec__head">资料</view>
+    <view class="res" wx:for="{{resources}}" wx:key="title">
+      <view class="res__main">
+        <view class="res__title">{{item.title}}</view>
+        <view class="zd-muted">{{item.type_label || item.type}}{{item.note ? ' · ' + item.note : ''}}</view>
+      </view>
+      <text class="link" wx:if="{{item.url}}" data-url="{{item.url}}" catch:tap="onCopyUrl">复制</text>
+    </view>
+  </view>
+
+  <view class="zd-sec" wx:if="{{chartBars.length}}">
+    <view class="bar-row" wx:for="{{chartBars}}" wx:key="id">
+      <text class="bar-name">{{item.name}}</text>
+      <view class="bar-track">
+        <view class="bar-fill" style="width: {{item.pct}}%;"></view>
+      </view>
+      <text class="zd-muted">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="zd-sec" wx:for="{{stages}}" wx:key="id">
+    <view class="stage-head">
+      <view class="zd-sec__head" style="margin:0">{{item.name}}</view>
+      <text
+        class="link"
+        wx:if="{{goal.status === 'active' && item.status !== 'done'}}"
+        data-id="{{item.id}}"
+        bind:tap="onCompleteStage"
+      >完成</text>
+    </view>
+    <view class="task" wx:for="{{item.tasks}}" wx:for-item="task" wx:key="id">
+      <view class="mark {{task.status === 'done' ? 'mark--on' : ''}}"></view>
+      <view class="task__body">
+        <view class="task__name">
+          <text class="task__prio task__prio--{{task.priority}}" wx:if="{{task.priority !== 'normal'}}">{{task.priorityLabel}}</text>
+          {{task.name}}
+        </view>
+        <view class="zd-muted">{{task.plannedDate}} · {{task.priorityLabel}}</view>
+        <view class="task__res" wx:if="{{task.resourceTitle}}">{{task.resourceTitle}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="zd-sec" wx:if="{{versions.length}}">
+    <view class="zd-sec__head">计划版本</view>
+    <view class="ver" wx:for="{{versions}}" wx:key="id">
+      <view class="ver__main">
+        <view>v{{item.version}} · {{item.reason}}</view>
+        <view class="zd-muted">{{item.createdAt}}</view>
+      </view>
+      <view
+        class="link"
+        wx:if="{{goal.status === 'active' || goal.status === 'planning'}}"
+        data-id="{{item.id}}"
+        data-version="{{item.version}}"
+        bind:tap="onRollback"
+      >回滚</view>
+    </view>
+  </view>
+
+  <view class="foot">
+    <button
+      wx:if="{{goal.status === 'planning' || goal.status === 'active'}}"
+      class="zd-btn zd-btn--ghost zd-btn--block"
+      bind:tap="onShareTemplate"
+      loading="{{sharing}}"
+    >分享为学习计划模板</button>
+    <button
+      wx:if="{{shareCode}}"
+      class="zd-btn zd-btn--ghost zd-btn--block"
+      style="margin-top:16rpx"
+      open-type="share"
+    >发给同学（码 {{shareCode}}）</button>
+    <button
+      wx:if="{{goal.status === 'planning'}}"
+      class="zd-btn zd-btn--primary zd-btn--block"
+      style="margin-top:16rpx"
+      bind:tap="onConfirmPlan"
+    >去确认计划</button>
+    <button
+      wx:if="{{goal.status === 'planning'}}"
+      class="zd-btn zd-btn--ghost zd-btn--block"
+      style="margin-top:16rpx"
+      bind:tap="onAbandonDraft"
+    >放弃学习目标</button>
+    <button
+      wx:if="{{goal.status === 'active'}}"
+      class="zd-btn zd-btn--primary zd-btn--block"
+      bind:tap="onCompleteGoal"
+    >完成并写入技能</button>
+    <button
+      wx:if="{{goal.status === 'active'}}"
+      class="zd-btn zd-btn--ghost zd-btn--block"
+      style="margin-top:16rpx"
+      bind:tap="onPause"
+    >暂停学习</button>
+    <button
+      wx:if="{{goal.status === 'paused'}}"
+      class="zd-btn zd-btn--primary zd-btn--block"
+      bind:tap="onResume"
+    >恢复学习</button>
+    <button
+      wx:if="{{goal.status === 'active' || goal.status === 'paused'}}"
+      class="zd-btn zd-btn--ghost zd-btn--block"
+      style="margin-top:16rpx"
+      bind:tap="onTerminate"
+    >终止学习目标</button>
+  </view>
+</view>

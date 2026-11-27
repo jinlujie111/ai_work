@@ -1,0 +1,143 @@
+.stats {
+  display: flex;
+  margin-top: 24rpx;
+}
+
+.stat {
+  flex: 1;
+  text-align: center;
+}
+
+.stat__n {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6rpx;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 0;
+  border-top: 1rpx solid var(--border);
+  color: var(--ink-2);
+}
+
+.next-item {
+  width: 100%;
+}
+
+.tabs {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 20rpx;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 18rpx 0;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1rpx solid var(--border);
+  color: var(--ink-3);
+  font-size: 28rpx;
+}
+
+.tab--on {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.pie {
+  display: flex;
+  height: 18rpx;
+  border-radius: 999rpx;
+  overflow: hidden;
+  margin-top: 24rpx;
+  background: var(--panel-2);
+}
+
+.pie__seg {
+  min-width: 0;
+}
+
+.pie__done {
+  background: var(--up);
+}
+
+.pie__todo {
+  background: #c5d2d0;
+}
+
+.pie__def {
+  background: var(--warn);
+}
+
+.legend {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 12rpx;
+}
+
+.legend__i {
+  font-size: 22rpx;
+  color: var(--ink-3);
+  padding-left: 16rpx;
+  position: relative;
+}
+
+.legend__i::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 2rpx;
+  transform: translateY(-50%);
+  background: #c5d2d0;
+}
+
+.legend__i--done::before {
+  background: var(--up);
+}
+
+.legend__i--def::before {
+  background: var(--warn);
+}
+
+.day-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8rpx;
+  margin-top: 20rpx;
+  min-height: 160rpx;
+}
+
+.day-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.day-bar-wrap {
+  height: 120rpx;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.day-bar {
+  width: 28rpx;
+  background: var(--accent);
+  border-radius: 8rpx 8rpx 0 0;
+  min-height: 8rpx;
+}

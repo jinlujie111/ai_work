@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#12151c">
+<title>拼车狂飙</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <div id="device">
+    <div id="stage">
+      <canvas id="game" width="750" height="1334"></canvas>
+
+      <section id="screen-menu" class="screen show">
+        <div class="brand">拼车狂飙</div>
+        <div class="slogan">别人撞车 Game Over<br>你撞车越撞越大</div>
+        <div class="menu-stats">
+          <div class="stat-chip" id="menu-gold">金币 0</div>
+          <div class="stat-chip" id="menu-car">自行车</div>
+        </div>
+        <div class="menu-actions">
+          <button class="btn primary" id="btn-continue" type="button">继续闯关</button>
+          <button class="btn ghost" id="btn-levels" type="button">选择路段</button>
+          <button class="btn ghost" id="btn-bag" type="button">背包合成</button>
+          <button class="btn ghost" id="btn-shop" type="button">商城</button>
+          <button class="btn ghost" id="btn-garage" type="button">车库</button>
+        </div>
+        <p class="hint">←→ 变道 · 空格释放技能 · Esc 暂停</p>
+      </section>
+
+      <section id="screen-levels" class="screen">
+        <div class="brand small">公路路段</div>
+        <div id="level-list" class="level-list"></div>
+        <button class="btn ghost" id="btn-levels-back" type="button">返回</button>
+      </section>
+
+      <section id="screen-bag" class="screen">
+        <div class="brand small">背包 · 合成</div>
+        <div class="meta" id="bag-gold">金币 0</div>
+        <div id="bag-list" class="level-list"></div>
+        <button class="btn ghost" id="btn-bag-back" type="button">返回</button>
+      </section>
+
+      <section id="screen-shop" class="screen">
+        <div class="brand small">商城</div>
+        <div class="meta" id="shop-gold">金币 0</div>
+        <p class="hint">卖出价格为买入的 50%</p>
+        <div id="shop-list" class="level-list"></div>
+        <button class="btn ghost" id="btn-shop-back" type="button">返回</button>
+      </section>
+
+      <section id="screen-garage" class="screen">
+        <div class="brand small">车库</div>
+        <div class="meta" id="garage-car">当前：自行车</div>
+        <div class="meta muted" id="garage-skill">技能：铃响闪身</div>
+        <div class="meta muted" id="garage-next">下一阶材料：—</div>
+        <button class="btn primary" id="btn-upgrade" type="button">升阶</button>
+        <button class="btn ghost" id="btn-garage-back" type="button">返回</button>
+      </section>
+
+      <section id="screen-play" class="screen">
+        <div class="hud-top">
+          <span id="hud-level">第 1 段</span>
+          <span id="hud-skill-name">技能</span>
+          <button class="btn pause-btn" id="btn-pause" type="button">暂停</button>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><i id="hud-progress"></i></div>
+          <div class="progress-meta">
+            <span id="hud-dist">0 m</span>
+            <span id="hud-width">宽度 —</span>
+            <span id="hud-parts">拼装 0</span>
+          </div>
+        </div>
+        <div id="hud-teach" class="teach-banner" hidden></div>
+        <div class="controls">
+          <button class="btn ctrl" id="btn-left" type="button">←</button>
+          <button class="btn skill" id="btn-skill" type="button">技能</button>
+          <button class="btn ctrl" id="btn-right" type="button">→</button>
+        </div>
+      </section>
+
+      <section id="screen-checkpoint" class="screen overlay">
+        <div class="panel">
+          <h2>窄路检查点</h2>
+          <p id="cp-tip">车太宽就过不去，丢掉一件或硬闯</p>
+          <p id="cp-width"></p>
+          <div id="cp-parts" class="choices"></div>
+          <button class="btn ghost" id="btn-cp-rush" type="button">硬闯</button>
+        </div>
+      </section>
+
+      <section id="screen-pause" class="screen overlay">
+        <div class="panel">
+          <h2>暂停</h2>
+          <button class="btn primary" id="btn-resume" type="button">继续</button>
+          <button class="btn ghost" id="btn-pause-menu" type="button">回主菜单</button>
+        </div>
+      </section>
+
+      <section id="screen-result" class="screen overlay">
+        <div class="panel">
+          <h2 id="result-title">结算</h2>
+          <p id="result-stars" class="stars">★★★</p>
+          <p id="result-level"></p>
+          <p id="result-gold"></p>
+          <p id="result-drops"></p>
+          <button class="btn primary" id="btn-next" type="button">下一路段</button>
+          <button class="btn ghost" id="btn-again" type="button">重试</button>
+          <button class="btn ghost" id="btn-result-menu" type="button">回主菜单</button>
+        </div>
+      </section>
+
+      <div id="toast"></div>
+    </div>
+  </div>
+</div>
+
+<script src="src/config.js"></script>
+<script src="src/util.js"></script>
+<script src="src/spec/params.js"></script>
+<script src="src/spec/parts.js"></script>
+<script src="src/spec/vehicles.js"></script>
+<script src="src/spec/levels.js"></script>
+<script src="src/cloud/save.js"></script>
+<script src="src/game/project.js"></script>
+<script src="src/game/run.js"></script>
+<script src="src/game/render.js"></script>
+<script src="src/game/core.js"></script>
+<script src="src/ui/dom.js"></script>
+<script src="src/boot/web.js"></script>
+</body>
+</html>

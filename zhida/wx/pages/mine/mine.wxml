@@ -1,0 +1,76 @@
+<view class="page mine">
+  <block wx:if="{{loggedIn}}">
+    <view class="mast" bind:tap="onEditNickname">
+      <view class="mast__left">
+        <view class="mast__title">{{user.nickname || '学习者'}}</view>
+        <view class="mast__sub">{{memberLabel}}</view>
+      </view>
+      <view class="mast__time" catch:tap="onTime">
+        <view class="mast__time-n">{{dailyMinutes}}</view>
+        <view class="mast__time-l">分/日</view>
+      </view>
+    </view>
+
+    <view class="block">
+      <view class="block__head">
+        <text class="block__no">一</text>
+        <text class="block__name">学习偏好</text>
+      </view>
+      <view class="sheet">
+        <view class="row" bind:tap="onTime">
+          <text class="row__title">每日可用时间</text>
+          <text class="row__val">{{dailyMinutes}} 分</text>
+        </view>
+        <view class="row" bind:tap="onSkills">
+          <text class="row__title">技能档案</text>
+          <text class="row__chev">›</text>
+        </view>
+        <view class="row" bind:tap="onReview">
+          <text class="row__title">学习复盘</text>
+          <text class="row__chev">›</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="block">
+      <view class="block__head">
+        <text class="block__no">二</text>
+        <text class="block__name">协作</text>
+      </view>
+      <view class="sheet">
+        <view class="row" bind:tap="onGroups">
+          <text class="row__title">学习群</text>
+          <text class="row__chev">›</text>
+        </view>
+        <view class="row" bind:tap="onTemplateJoin">
+          <text class="row__title">复制学习计划</text>
+          <text class="row__chev">›</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="block">
+      <view class="block__head">
+        <text class="block__no">三</text>
+        <text class="block__name">账户</text>
+      </view>
+      <view class="sheet">
+        <view class="row" bind:tap="onMembership">
+          <text class="row__title">会员</text>
+          <text class="row__val">{{user.is_member ? '已开通' : '免费版'}}</text>
+        </view>
+        <view class="row row--danger" bind:tap="onClear">
+          <text class="row__title">退出登录</text>
+          <text class="row__chev">›</text>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="mast mast--guest">
+      <view class="mast__title">未登录</view>
+    </view>
+    <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onLogin" loading="{{loggingIn}}">登录</button>
+  </block>
+</view>

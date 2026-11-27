@@ -1,0 +1,17 @@
+<view class="page page--plain">
+  <view class="hero">
+    <view class="zd-title">复制学习计划</view>
+  </view>
+
+  <input class="input" placeholder="分享码" value="{{code}}" bindinput="onInput" />
+  <button class="zd-btn zd-btn--ghost zd-btn--block" bind:tap="onPreview" loading="{{loadingPreview}}">查看</button>
+
+  <view class="zd-sec" wx:if="{{template}}">
+    <view class="zd-sec__head">{{template.title}}</view>
+    <view class="line" wx:for="{{template.modules}}" wx:key="key">
+      <text class="line__name">{{item.name}}</text>
+      <text class="zd-muted"> {{item.difficulty_label || item.difficulty || ''}}</text>
+    </view>
+    <button class="zd-btn zd-btn--primary zd-btn--block" style="margin-top:24rpx" bind:tap="onClone" loading="{{loadingClone}}">复制为我的草案</button>
+  </view>
+</view>

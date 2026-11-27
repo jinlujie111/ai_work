@@ -1,0 +1,11 @@
+.hero {
+  margin-bottom: 28rpx;
+}
+
+.input {
+  margin-bottom: 28rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--border);
+  font-size: 32rpx;
+  letter-spacing: 0.08em;
+}

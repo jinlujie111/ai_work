@@ -1,0 +1,89 @@
+{
+    "description":  "森林求生 · Forest Survival —— 单指拖动，在森林里活到天亮",
+    "projectname":  "deep-forest",
+    "appid":  "wx42f4518b87fb07c8",
+    "compileType":  "game",
+    "libVersion":  "2.19.4",
+    "setting":  {
+                    "es6":  true,
+                    "enhance":  true,
+                    "minified":  true,
+                    "postcss":  false,
+                    "urlCheck":  false,
+                    "autoAudits":  false,
+                    "uglifyFileName":  false,
+                    "compileWorklet":  false,
+                    "uploadWithSourceMap":  true,
+                    "packNpmManually":  false,
+                    "packNpmRelationList":  [
+
+                                            ],
+                    "minifyWXSS":  true,
+                    "minifyWXML":  true,
+                    "localPlugins":  false,
+                    "disableUseStrict":  false,
+                    "useCompilerPlugins":  false,
+                    "condition":  false,
+                    "babelSetting":  {
+                                         "ignore":  [
+
+                                                    ],
+                                         "disablePlugins":  [
+
+                                                            ],
+                                         "outputPath":  ""
+                                     }
+                },
+    "packOptions":  {
+                        "ignore":  [
+                                       {
+                                           "value":  "test",
+                                           "type":  "folder"
+                                       },
+                                       {
+                                           "value":  "tools",
+                                           "type":  "folder"
+                                       },
+                                       {
+                                           "value":  "dist",
+                                           "type":  "folder"
+                                       },
+                                       {
+                                           "value":  ".shots",
+                                           "type":  "folder"
+                                       },
+                                       {
+                                           "value":  "index.html",
+                                           "type":  "file"
+                                       },
+                                       {
+                                           "value":  "styles.css",
+                                           "type":  "file"
+                                       },
+                                       {
+                                           "value":  "README.md",
+                                           "type":  "file"
+                                       },
+                                       {
+                                           "value":  "src/ui/dom.js",
+                                           "type":  "file"
+                                       },
+                                       {
+                                           "value":  "src/boot/web.js",
+                                           "type":  "file"
+                                       }
+                                   ],
+                        "include":  [
+
+                                    ]
+                    },
+    "condition":  {
+
+                  },
+    "simulatorPluginLibVersion":  {
+
+                                  },
+    "editorSetting":  {
+
+                      }
+}

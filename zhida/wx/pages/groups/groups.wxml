@@ -1,0 +1,26 @@
+<view class="page page--plain groups">
+  <view class="hero">
+    <view class="zd-title">学习群</view>
+  </view>
+
+  <view class="actions">
+    <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onCreate">创建</button>
+    <button class="zd-btn zd-btn--ghost zd-btn--block" style="margin-top:16rpx" bind:tap="onJoin">加入</button>
+  </view>
+
+  <view class="zd-sec" wx:if="{{items.length}}">
+    <view
+      class="row"
+      wx:for="{{items}}"
+      wx:key="id"
+      data-id="{{item.id}}"
+      bind:tap="onOpen"
+    >
+      <view class="row__main">
+        <view class="row__name">{{item.name}}</view>
+        <view class="zd-muted">{{item.member_count}} 人{{item.role === 'owner' ? ' · 群主' : ''}}</view>
+      </view>
+      <text class="row__go">›</text>
+    </view>
+  </view>
+</view>

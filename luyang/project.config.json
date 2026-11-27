@@ -1,0 +1,32 @@
+{
+  "description": "路养 · 边开边养，开到更远",
+  "projectname": "luyang",
+  "appid": "touristappid",
+  "compileType": "game",
+  "libVersion": "3.5.5",
+  "cloudfunctionRoot": "cloudfunctions/",
+  "cloudbaseRoot": "./",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "minified": true,
+    "urlCheck": false,
+    "postcss": false,
+    "autoAudits": false,
+    "uploadWithSourceMap": true
+  },
+  "packOptions": {
+    "ignore": [
+      { "value": "tools", "type": "folder" },
+      { "value": "doc", "type": "folder" },
+      { "value": "index.html", "type": "file" },
+      { "value": "styles.css", "type": "file" },
+      { "value": "README.md", "type": "file" },
+      { "value": "src/ui/dom.js", "type": "file" },
+      { "value": "src/boot/web.js", "type": "file" }
+    ],
+    "include": []
+  },
+  "condition": {},
+  "editorSetting": {}
+}

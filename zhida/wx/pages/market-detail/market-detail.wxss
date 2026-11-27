@@ -1,0 +1,83 @@
+.hero {
+  margin-bottom: 28rpx;
+  padding-bottom: 24rpx;
+  border-bottom: 1rpx solid var(--border);
+}
+
+.hero__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.status {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: var(--ink-3);
+  padding-top: 8rpx;
+}
+
+.meta {
+  margin-top: 10rpx;
+  margin-bottom: 12rpx;
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin-bottom: 10rpx;
+}
+
+.line {
+  padding: 12rpx 0;
+  font-size: 26rpx;
+  color: var(--ink-2);
+  line-height: 1.5;
+  border-bottom: 1rpx solid var(--border);
+}
+
+.line:last-child {
+  border-bottom: none;
+}
+
+.learn {
+  margin-bottom: 12rpx;
+  line-height: 1.55;
+}
+
+.skills {
+  margin-bottom: 14rpx;
+  font-size: 22rpx;
+  color: var(--ink-3);
+}
+
+.res,
+.mat {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  border-top: 1rpx solid var(--border);
+}
+
+.res__title,
+.mat__title {
+  font-size: 28rpx;
+  color: var(--ink-1);
+}
+
+.link {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: var(--accent);
+  padding-top: 4rpx;
+}
+
+.foot {
+  margin-top: 40rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+}

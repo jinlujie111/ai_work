@@ -1,0 +1,106 @@
+<view class="page page--plain">
+  <view class="tabs">
+    <view class="tab {{tab === 'daily' ? 'tab--on' : ''}}" data-tab="daily" bind:tap="onTab">日</view>
+    <view class="tab {{tab === 'weekly' ? 'tab--on' : ''}}" data-tab="weekly" bind:tap="onTab">周</view>
+  </view>
+
+  <block wx:if="{{tab === 'daily'}}">
+    <view class="zd-card">
+      <view class="zd-kicker">{{daily.date}}</view>
+      <view class="zd-title">今日</view>
+      <view class="stats">
+        <view class="stat">
+          <view class="stat__n">{{daily.completionRate}}%</view>
+          <view class="zd-muted">完成率</view>
+        </view>
+        <view class="stat">
+          <view class="stat__n">{{daily.doneCount}}</view>
+          <view class="zd-muted">已完成</view>
+        </view>
+        <view class="stat">
+          <view class="stat__n">{{daily.minutes}}</view>
+          <view class="zd-muted">分钟</view>
+        </view>
+      </view>
+      <view class="pie" wx:if="{{daily.chart}}">
+        <view class="pie__seg pie__done" style="flex: {{daily.chart.done || 0.01}};"></view>
+        <view class="pie__seg pie__todo" style="flex: {{daily.chart.todo || 0.01}};"></view>
+        <view class="pie__seg pie__def" style="flex: {{daily.chart.deferred || 0.01}};"></view>
+      </view>
+      <view class="legend" wx:if="{{daily.chart}}">
+        <text class="legend__i legend__i--done">完成</text>
+        <text class="legend__i legend__i--todo">待办</text>
+        <text class="legend__i legend__i--def">延期</text>
+      </view>
+    </view>
+    <view class="zd-card zd-card--soft" wx:if="{{daily.advice}}">
+      <view class="zd-body">{{daily.advice}}</view>
+    </view>
+  </block>
+
+  <block wx:else>
+    <view class="zd-card">
+      <view class="zd-kicker">{{rangeLabel}}</view>
+      <view class="zd-title">本周</view>
+      <view class="stats">
+        <view class="stat">
+          <view class="stat__n">{{completionRate}}%</view>
+          <view class="zd-muted">完成率</view>
+        </view>
+        <view class="stat">
+          <view class="stat__n">{{doneCount}}</view>
+          <view class="zd-muted">已完成</view>
+        </view>
+        <view class="stat">
+          <view class="stat__n">{{deferredCount}}</view>
+          <view class="zd-muted">延期</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="zd-card" wx:if="{{dayChart.length}}">
+      <view class="day-bars">
+        <view class="day-col" wx:for="{{dayChart}}" wx:key="date">
+          <view class="day-bar-wrap">
+            <view class="day-bar" style="height: {{item.barHeight}}rpx;"></view>
+          </view>
+          <text class="zd-muted">{{item.label}}</text>
+          <text class="zd-muted">{{item.done}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="zd-card" wx:if="{{minutes}}">
+      <view class="zd-title">{{minutes}} 分</view>
+    </view>
+
+    <view class="zd-card" wx:if="{{goalStats.length}}">
+      <view class="row" wx:for="{{goalStats}}" wx:key="id">
+        <view>{{item.title}}</view>
+        <text class="zd-chip">{{item.progress}}%</text>
+      </view>
+    </view>
+
+    <view class="zd-card" wx:if="{{skillChanges.length}}">
+      <view class="row" wx:for="{{skillChanges}}" wx:key="skill_name">
+        <view>{{item.skill_name}}</view>
+        <text class="zd-chip">L{{item.level}}</text>
+      </view>
+    </view>
+
+    <view class="zd-card zd-card--soft" wx:if="{{advice}}">
+      <view class="zd-body">{{advice}}</view>
+    </view>
+
+    <view class="zd-card" wx:if="{{nextWeekPlan.length}}">
+      <view class="zd-kicker">{{nextWeekLabel}}</view>
+      <view class="zd-title">下周</view>
+      <view class="row" wx:for="{{nextWeekPlan}}" wx:key="task_id">
+        <view class="next-item">
+          <view>{{item.name}}</view>
+          <view class="zd-muted">{{item.planned_date}} · {{item.estimated_minutes}} 分</view>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

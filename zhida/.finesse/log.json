@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "builds": [
+    {
+      "date": "2026-11-26",
+      "target": "zhida/wx",
+      "register": "h5+product+ai-console",
+      "morphology": "A / A.1 daily desk",
+      "palette": "Teal & Clay (Set 4) on sage-cool paper",
+      "soul": "calm executor",
+      "spectacle": 2,
+      "density": 5,
+      "notes": "P0 local-first mini program: today desk, goal create wizard, plan confirm, replan approval, weekly review. No hero imagery. Avoided default blue/purple."
+    }
+  ]
+}
