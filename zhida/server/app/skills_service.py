@@ -138,8 +138,27 @@ def upsert_skill(
     return skill
 
 
+def _primary_skill_for_goal(goal: Goal) -> tuple[str, str, int]:
+    """返回 (domain, 主技能名, 基础等级)。阶段名不再单独成技能。"""
+    domain_map = {
+        "python": ("技术", "Python", 2),
+        "english": ("语言", "英语", 2),
+        "fitness": ("运动", "体能训练", 2),
+    }
+    mapped = domain_map.get((goal.goal_type or "").strip().lower())
+    if mapped:
+        return mapped
+    # 无类型时：用较短目标名作主技能，避免把整句目标塞进档案
+    title = (goal.title or "").strip() or "未命名技能"
+    name = title[:20]
+    return ("其他", name, 2)
+
+
 def propose_skills_for_goal(db: Session, user: User, goal: Goal) -> list[dict]:
-    """阶段/目标完成时生成待确认技能候选（不落库）。"""
+    """阶段/目标完成时生成待确认技能候选（不落库）。
+
+    只提议「主技能」一条；已完成阶段写入证据说明，不再把阶段名拆成多个技能。
+    """
     stages = (
         db.query(GoalStage)
         .filter(GoalStage.goal_id == goal.id)
@@ -147,66 +166,44 @@ def propose_skills_for_goal(db: Session, user: User, goal: Goal) -> list[dict]:
         .all()
     )
     done_stages = [s for s in stages if s.status == "done"]
+    if not done_stages and goal.status != "done":
+        return []
+
     tasks = db.query(Task).filter(Task.goal_id == goal.id, Task.status == "done").all()
+    domain, skill_name, base_level = _primary_skill_for_goal(goal)
 
-    domain_map = {
-        "python": ("技术", "Python", 2),
-        "english": ("语言", "英语", 2),
-        "fitness": ("运动", "体能训练", 2),
-    }
-    domain, default_name, default_level = domain_map.get(goal.goal_type or "", ("其他", goal.title[:20], 2))
+    goal_done = goal.status == "done" or (stages and len(done_stages) == len(stages) and len(stages) > 0)
+    level = base_level
+    if goal_done:
+        level = min(4, base_level + (1 if len(tasks) >= 8 else 0) + 1)
+    elif len(done_stages) >= 2:
+        level = min(4, base_level + 1)
 
-    candidates = []
-    # 目标完成：主技能
-    if goal.status == "done" or (stages and len(done_stages) == len(stages)):
-        candidates.append(
-            {
-                "skill_name": default_name,
-                "domain": domain,
-                "suggested_level": min(3, default_level + (1 if len(tasks) >= 8 else 0)),
-                "reason": f"完成目标「{goal.title}」",
-                "goal_id": goal.id,
-                "stage_id": 0,
-            }
-        )
+    stage_bits = [((s.name or "").strip() or "阶段")[:18] for s in done_stages[:6]]
+    if goal_done:
+        reason = f"完成目标「{goal.title}」"
+        if stage_bits:
+            reason += f"；阶段：{'、'.join(stage_bits)}"
+    else:
+        reason = f"目标「{goal.title}」已完成 {len(done_stages)}/{len(stages) or len(done_stages)} 阶段"
+        if stage_bits:
+            reason += f"：{'、'.join(stage_bits)}"
 
-    # 阶段完成：阶段名作技能线索
-    for s in done_stages:
-        name = (s.name or "").replace("阶段", "").strip() or default_name
-        if len(name) > 24:
-            name = name[:24]
-        candidates.append(
-            {
-                "skill_name": name,
-                "domain": domain,
-                "suggested_level": 2,
-                "reason": f"完成阶段「{s.name}」",
-                "goal_id": goal.id,
-                "stage_id": s.id,
-            }
-        )
-
-    # 去重：同名保留较高建议等级
-    merged: dict[str, dict] = {}
-    for c in candidates:
-        key = c["skill_name"]
-        if key not in merged or c["suggested_level"] > merged[key]["suggested_level"]:
-            merged[key] = c
-
-    # 标注已有等级
     existing = {r.skill_name: r for r in list_confirmed_skills(db, user.id)}
-    out = []
-    for c in merged.values():
-        cur = existing.get(c["skill_name"])
-        out.append(
-            {
-                **c,
-                "current_level": int(cur.level) if cur else 0,
-                "current_level_label": LEVEL_LABELS.get(int(cur.level) if cur else 0, "未知"),
-                "suggested_level_label": LEVEL_LABELS.get(c["suggested_level"], "入门"),
-            }
-        )
-    return out
+    cur = existing.get(skill_name)
+    return [
+        {
+            "skill_name": skill_name,
+            "domain": domain,
+            "suggested_level": level,
+            "reason": reason,
+            "goal_id": goal.id,
+            "stage_id": 0,
+            "current_level": int(cur.level) if cur else 0,
+            "current_level_label": LEVEL_LABELS.get(int(cur.level) if cur else 0, "未知"),
+            "suggested_level_label": LEVEL_LABELS.get(level, "入门"),
+        }
+    ]
 
 
 def mark_stage_progress(db: Session, goal_id: int) -> list[GoalStage]:

@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "概览"
+  "navigationBarTitleText": "概览",
+  "usingComponents": {
+    "quick-add": "/components/quick-add/quick-add"
+  }
 }

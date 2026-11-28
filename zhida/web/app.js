@@ -156,10 +156,17 @@
     )}（不计收入）`;
 
     const tokens = d.ai.total_tokens_in_range || 0;
+    const est = d.ai.cost_estimate || {};
+    const tp = d.ai.token_plan || {};
     $("kpiCost").textContent = num(tokens);
+    const estCny = est.range_list_cny != null ? ` · 估 ${money(est.range_list_cny)}` : "";
+    const tpHint =
+      tp.enabled && tp.utilization != null
+        ? ` · Plan ${Math.round(tp.utilization * 100)}%`
+        : "";
     $("costHint").textContent = `准确 ${d.ai.accurate_calls_in_range}/${d.ai.calls_in_range} 次 · 入 ${num(
       d.ai.prompt_tokens_in_range
-    )} / 出 ${num(d.ai.completion_tokens_in_range)}`;
+    )} / 出 ${num(d.ai.completion_tokens_in_range)}${estCny}${tpHint}`;
 
     $("kpiUsers").textContent = `${d.users.total} / ${d.users.members_active}`;
     $("usersHint").textContent = `创建率 ${pct(d.users.create_rate)} · 转化 ${pct(
@@ -252,6 +259,163 @@
       ${pol.test_orders || ""}；${pol.ai || ""}。
       排除假算 token <strong>${d.ai.inaccurate_calls_in_range}</strong> 次。
       ${pol.note || ""}`;
+  }
+
+  function etaText(v) {
+    if (v == null || v === "") return "—";
+    if (typeof v === "string") return v;
+    return String(v);
+  }
+
+  function renderWallets(d) {
+    const pack = d.ai?.wallets || {};
+    const wallets = pack.wallets || [];
+    const models = pack.models || [];
+    const period = pack.period === "all" ? "累计" : "自然月";
+    $("walletMeta").textContent = `${period} · 日均回看 ${pack.burn_lookback_days || 7} 日 · 估算非实收`;
+    $("walletNote").textContent = pack.definition || d.data_policy?.wallets || "";
+
+    const visible = wallets.filter((w) => w.spent_cny > 0 || w.daily_burn_cny > 0 || w.has_budget || w.active);
+    $("walletGrid").innerHTML = (visible.length ? visible : wallets)
+      .map((w) => {
+        const util = w.utilization != null ? Math.round(w.utilization * 100) : null;
+        const rem =
+          w.remaining_cny == null ? "未设预算" : money(w.remaining_cny);
+        const budget = w.budget_cny == null ? "—" : money(w.budget_cny);
+        const days =
+          w.days_left == null
+            ? etaText(w.exhaust_at)
+            : `约 ${w.days_left} 天（${etaText(w.exhaust_at)}）`;
+        const active = w.active ? `<span class="chip">当前</span>` : "";
+        const tp =
+          w.token_plan && w.credits_remaining_estimate != null
+            ? `Credits 余 ${num(Math.round(w.credits_remaining_estimate))}`
+            : "";
+        return `<article class="wallet-card is-${w.level || "ok"}${w.active ? " is-active" : ""}">
+          <div class="wallet-top">
+            <div>
+              <div class="wallet-name">${w.label} ${active}</div>
+              <div class="wallet-sub">入¥${w.input_cny_per_1m} / 出¥${w.output_cny_per_1m} /百万 · 调用 ${w.calls || 0}</div>
+            </div>
+            <div class="tp-level is-${w.level || "ok"}">${
+              { ok: "正常", warn: "预警", critical: "告急", off: "未设预算" }[w.level] || w.level
+            }</div>
+          </div>
+          <div class="wallet-nums">
+            <div><span>已消耗</span><strong>${money(w.spent_cny || 0)}</strong></div>
+            <div><span>剩余</span><strong>${rem}</strong></div>
+            <div><span>预算</span><strong>${budget}</strong></div>
+            <div><span>日均</span><strong>${money(w.daily_burn_cny || 0)}</strong></div>
+          </div>
+          <div class="tp-gauge">
+            <div class="tp-track"><div class="tp-fill" style="width:${util == null ? 0 : Math.min(100, util)}%"></div></div>
+            <div class="tp-gauge-labels">
+              <span>${util == null ? "无预算占比" : util + "%"}</span>
+              <span>${days}</span>
+              <span>${tp}</span>
+            </div>
+          </div>
+        </article>`;
+      })
+      .join("");
+
+    const labelOf = Object.fromEntries(wallets.map((w) => [w.id, w.label]));
+    $("modelWalletBody").innerHTML = models.length
+      ? models
+          .map((m) => {
+            const rem = m.remaining_cny == null ? "—" : money(m.remaining_cny);
+            const eta =
+              m.exhaust_at == null
+                ? "—"
+                : m.days_left != null && typeof m.exhaust_at === "string" && m.exhaust_at.includes("-")
+                  ? `${m.days_left} 天 · ${m.exhaust_at}`
+                  : etaText(m.exhaust_at);
+            return `<tr>
+              <td>${m.model}</td>
+              <td>${labelOf[m.wallet_id] || m.wallet_id}</td>
+              <td class="num">${money(m.spent_cny || 0)}</td>
+              <td class="num">${rem}</td>
+              <td class="num">${money(m.daily_burn_cny || 0)}</td>
+              <td class="num">${eta}</td>
+              <td class="num">${num(m.total_tokens || 0)}</td>
+            </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="7" style="color:var(--ink-3)">本周期暂无准确 token 消耗</td></tr>`;
+  }
+
+  function renderTokenPlan(d) {
+    const tp = d.ai?.token_plan || {};
+    const est = d.ai?.cost_estimate || {};
+    const box = $("tokenPlanBox");
+    if (!tp.enabled) {
+      $("tokenPlanMeta").textContent = "未启用（TOKEN_PLAN_ENABLED=false 或额度为 0）";
+      box.className = "token-plan is-off";
+      $("tpName").textContent = "Token Plan 监控关闭";
+      $("tpModel").textContent = `${est.provider || "—"} / ${est.model || "—"}`;
+      $("tpLevel").textContent = "OFF";
+      $("tpLevel").className = "tp-level";
+      $("tpFill").style.width = "0%";
+      $("tpUsed").textContent = "—";
+      $("tpPct").textContent = "—";
+      $("tpQuota").textContent = "—";
+      $("tpMetrics").innerHTML = "";
+      $("tpNote").textContent = tp.definition || "";
+      return;
+    }
+
+    const util = Math.max(0, Math.min(1, Number(tp.utilization) || 0));
+    const pctUtil = Math.round(util * 100);
+    const level = tp.level || "ok";
+    box.className = `token-plan is-${level}`;
+    $("tokenPlanMeta").textContent = `自然月自 ${(tp.month_start || "").slice(0, 10)} · 估算非实扣`;
+    $("tpName").textContent = `Token Plan · ${tp.name || "Lite"}`;
+    $("tpModel").textContent = `${est.provider || "—"} / ${est.model || "—"} · 单价 入¥${
+      est.input_cny_per_1m
+    } / 出¥${est.output_cny_per_1m} /百万`;
+    const levelText = { ok: "充足", warn: "预警", critical: "告急" }[level] || level;
+    $("tpLevel").textContent = levelText;
+    $("tpLevel").className = `tp-level is-${level}`;
+    $("tpFill").style.width = `${pctUtil}%`;
+    $("tpUsed").textContent = `已用估 ${num(Math.round(tp.month_credits_estimate || 0))} C`;
+    $("tpPct").textContent = `${pctUtil}%`;
+    $("tpQuota").textContent = `额度 ${num(tp.monthly_credits || 0)} C`;
+
+    $("tpMetrics").innerHTML = [
+      card(
+        "容量",
+        "剩余 Credits（估）",
+        num(Math.round(tp.remaining_credits_estimate || 0)),
+        `本月 token ${num(tp.month_total_tokens || 0)} · 调用 ${tp.month_accurate_calls || 0}`
+      ),
+      card(
+        "容量",
+        "本月标价成本（估）",
+        money(tp.month_list_cny_estimate || 0),
+        `区间估 ${money(est.range_list_cny || 0)}`
+      ),
+      card(
+        "容量",
+        "还可撑免费用户（估）",
+        tp.users_remaining_estimate == null ? "—" : num(tp.users_remaining_estimate),
+        `满额约 ${tp.users_capacity_estimate ?? "—"} 人 · 每人 ${tp.free_goal_limit || 5} 目标 ≈ ${
+          tp.per_free_user_credits_estimate ?? "—"
+        } C`
+      ),
+      card(
+        "容量",
+        "单目标消耗（估）",
+        `${tp.per_goal?.credits_estimate ?? "—"} C`,
+        `入 ${num(tp.per_goal?.prompt_tokens)} / 出 ${num(tp.per_goal?.completion_tokens)}`
+      ),
+    ].join("");
+    $("tpNote").textContent =
+      (tp.definition || "") +
+      "；预警线 " +
+      Math.round((tp.warn_ratio || 0.7) * 100) +
+      "% / 告急 " +
+      Math.round((tp.critical_ratio || 0.9) * 100) +
+      "%。";
   }
 
   function renderPurpose(d) {
@@ -442,11 +606,14 @@
     renderChart(d.series || []);
     renderProfitStack(d);
     renderMetrics(d);
+    renderWallets(d);
+    renderTokenPlan(d);
     renderPurpose(d);
     renderGoals(d);
-    $("pricingNote").textContent =
-      d.data_policy?.note ||
-      "收入仅真实支付；开发开通单单独展示；AI 只统计接口真实 token，不做金额折算。";
+    const pol = d.data_policy || {};
+    $("pricingNote").textContent = [pol.note, pol.ai, pol.wallets, pol.token_plan]
+      .filter(Boolean)
+      .join(" ");
   }
 
   async function load() {

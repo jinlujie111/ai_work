@@ -32,10 +32,10 @@ def _parse_modules_blob(raw: str | None) -> dict:
         data = json.loads(raw)
         if not isinstance(data, dict):
             return {"skill_categories": [], "modules": []}
-        return {
-            "skill_categories": data.get("skill_categories") or [],
-            "modules": data.get("modules") or [],
-        }
+        out = dict(data)
+        out["skill_categories"] = data.get("skill_categories") or []
+        out["modules"] = data.get("modules") or []
+        return out
     except json.JSONDecodeError:
         return {"skill_categories": [], "modules": []}
 
@@ -104,6 +104,8 @@ def enrich_task_learning(
     """
     out = dict(item or serialize_task(task))
     out["goal_title"] = goal.title if goal else out.get("goal_title") or ""
+    out["goal_type"] = (goal.goal_type if goal else "") or ""
+    out["is_inbox"] = bool(goal and (goal.goal_type or "") == "inbox")
     if stages is None:
         stages = (
             db.query(GoalStage)

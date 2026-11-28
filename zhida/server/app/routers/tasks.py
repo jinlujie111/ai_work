@@ -7,9 +7,10 @@ from ..auth import get_current_user
 from ..db import get_db
 from ..models import Goal, Task, User
 from ..query_helpers import load_goals_map, load_stages_by_goal
-from ..schemas import TaskCreateIn, TaskStatusIn, TaskUpdateIn
+from ..schemas import TaskCreateIn, TaskQuickCreateIn, TaskStatusIn, TaskUpdateIn
 from ..timeutil import utc_now
 from ..workflows.fallback import today_str
+from ..workflows.inbox import ensure_inbox_goal, is_inbox_goal
 from ..workflows.plan import enrich_task_learning, serialize_task
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -51,8 +52,13 @@ def today_tasks(
     items = []
     for t in tasks:
         goal = goals_map.get(t.goal_id)
-        # 仅「进行中」目标进入今日清单；待确认(planning)未生效
-        if not goal or goal.status != "active":
+        # 学习目标仅 active；收集箱快速待办并行展示
+        if not goal:
+            continue
+        if is_inbox_goal(goal):
+            if goal.status != "active":
+                continue
+        elif goal.status != "active":
             continue
         items.append(
             enrich_task_learning(
@@ -64,9 +70,15 @@ def today_tasks(
             )
         )
     done = len([t for t in items if t["status"] == "done"])
+    from ..workflows.inbox import INBOX_GOAL_TYPE
+
     active_goals = (
         db.query(Goal)
-        .filter(Goal.user_id == user.id, Goal.status == "active")
+        .filter(
+            Goal.user_id == user.id,
+            Goal.status == "active",
+            Goal.goal_type != INBOX_GOAL_TYPE,
+        )
         .order_by(Goal.id.desc())
         .all()
     )
@@ -80,6 +92,46 @@ def today_tasks(
     }
 
 
+@router.post("/quick")
+def quick_create_task(
+    body: TaskQuickCreateIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Todoist 式快速添加：写入收集箱，不走意图/LLM，不触发日历冲突重排。"""
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="请输入任务名")
+    planned = body.planned_date or today_str()
+    if not _valid_date(planned):
+        raise HTTPException(status_code=400, detail="invalid planned_date")
+    pri = (body.priority or "normal").lower()
+    if pri not in {"high", "normal", "low"}:
+        pri = "normal"
+    inbox = ensure_inbox_goal(db, user)
+    max_order = db.query(Task).filter(Task.goal_id == inbox.id).count()
+    task = Task(
+        goal_id=inbox.id,
+        stage_id=None,
+        user_id=user.id,
+        name=name[:255],
+        description=(body.description or "").strip(),
+        estimated_minutes=max(5, min(int(body.estimated_minutes or 25), 240)),
+        # + 号快速添加无优先级概念，统一 normal 且前端不展示
+        priority="normal",
+        planned_date=planned,
+        status="todo",
+        sort_order=max_order,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    item = serialize_task(task)
+    item["goal_title"] = inbox.title
+    item["source"] = "quick"
+    return item
+
+
 @router.post("")
 def create_task(
     body: TaskCreateIn,
@@ -89,6 +141,8 @@ def create_task(
     goal = db.get(Goal, body.goal_id)
     if not goal or goal.user_id != user.id:
         raise HTTPException(status_code=404, detail="goal not found")
+    if is_inbox_goal(goal):
+        raise HTTPException(status_code=400, detail="请使用 /api/tasks/quick 添加收集箱任务")
     if goal.status not in {"active", "planning"}:
         raise HTTPException(status_code=400, detail="goal not editable")
     planned = body.planned_date or today_str()
@@ -141,10 +195,10 @@ def update_status(
     stage_just_done = False
     goal_just_done = False
     if body.status == "done" and task.goal_id:
-        newly = mark_stage_progress(db, task.goal_id)
-        stage_just_done = bool(newly)
         goal = db.get(Goal, task.goal_id)
-        if goal:
+        if goal and not is_inbox_goal(goal):
+            newly = mark_stage_progress(db, task.goal_id)
+            stage_just_done = bool(newly)
             goal_just_done = maybe_complete_goal(db, goal)
             if stage_just_done or goal_just_done:
                 skill_proposals = propose_skills_for_goal(db, user, goal)

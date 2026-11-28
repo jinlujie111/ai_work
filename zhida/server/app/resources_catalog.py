@@ -67,6 +67,13 @@ LEARNING_PATHS: dict[str, dict] = {
         "frameworks": [],
         "howto": ["先录像自查动作", "记录组数重量"],
     },
+    "travel": {
+        "label": "旅行规划",
+        "summary": "先定目的地与预算，再订交通住宿，最后落每日行程与清单。",
+        "knowledge": ["目的地与季节", "预算与签证", "交通住宿", "逐日行程与应急"],
+        "frameworks": [],
+        "howto": ["先锁定必去点", "预留弹性半天", "重要票据截图备份"],
+    },
     "generic": {
         "label": "通用学习",
         "summary": "先定义可检验结果，再选最少资料反复练。",
@@ -188,6 +195,26 @@ CATALOG: dict[str, list[dict]] = {
             "url": "",
         },
     ],
+    "travel": [
+        {
+            "title": "马蜂窝 / 穷游攻略",
+            "type": "doc",
+            "note": "目的地亮点与避坑",
+            "url": "https://www.mafengwo.cn/",
+        },
+        {
+            "title": "高德 / Google Maps",
+            "type": "tool",
+            "note": "通勤时间与路线预估",
+            "url": "",
+        },
+        {
+            "title": "航空/酒店官方或聚合预订",
+            "type": "tool",
+            "note": "先比价再下单，保留确认单",
+            "url": "",
+        },
+    ],
     "generic": [
         {
             "title": "目标拆解：先定义可检验结果",
@@ -223,6 +250,8 @@ def infer_goal_type(raw_text: str, explicit: str = "") -> str:
         return "english"
     if re.search(r"健身|减脂|增肌|跑步|深蹲|力量|有氧", text, re.I):
         return "fitness"
+    if re.search(r"旅行|旅游|出行|行程|攻略|度假|自驾|机票|酒店", text, re.I):
+        return "travel"
     if re.search(r"excel|表格|透视表|ppt|powerpoint|word文档|办公软件", text, re.I):
         return "office"
     if explicit and explicit not in ("", "generic"):

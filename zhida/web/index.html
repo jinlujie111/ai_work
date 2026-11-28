@@ -47,7 +47,7 @@
         <button type="button" class="nav-item" data-jump="metrics-p0">P0 指标</button>
         <button type="button" class="nav-item" data-jump="metrics-p1">P1 指标</button>
         <button type="button" class="nav-item" data-jump="metrics-p2">P2 指标</button>
-        <button type="button" class="nav-item" data-jump="ai">AI 成本</button>
+        <button type="button" class="nav-item" data-jump="ai">AI / Token Plan</button>
       </nav>
       <div class="rail-foot">
         <button type="button" class="btn-ghost" id="logoutBtn">退出登录</button>
@@ -152,7 +152,60 @@
         </article>
       </section>
 
-      <section id="ai" class="block split">
+      <section id="ai" class="block">
+        <article class="panel token-plan-panel">
+          <header class="panel-h">
+            <h2>大模型钱包 · 消耗 / 剩余 / 用尽预估</h2>
+            <span class="muted" id="walletMeta">—</span>
+          </header>
+          <div class="wallet-grid" id="walletGrid"></div>
+          <div class="table-wrap" style="margin-top:14px">
+            <table>
+              <thead>
+                <tr>
+                  <th>模型</th>
+                  <th>钱包</th>
+                  <th class="num">本周期消耗 ¥</th>
+                  <th class="num">剩余 ¥</th>
+                  <th class="num">日均 ¥</th>
+                  <th class="num">预计用尽</th>
+                  <th class="num">Token</th>
+                </tr>
+              </thead>
+              <tbody id="modelWalletBody"></tbody>
+            </table>
+          </div>
+          <p class="tp-note" id="walletNote"></p>
+        </article>
+
+        <article class="panel token-plan-panel" style="margin-top:14px">
+          <header class="panel-h">
+            <h2>Token Plan 容量监控</h2>
+            <span class="muted" id="tokenPlanMeta">—</span>
+          </header>
+          <div class="token-plan" id="tokenPlanBox">
+            <div class="tp-head">
+              <div>
+                <div class="tp-name" id="tpName">—</div>
+                <div class="tp-sub" id="tpModel">—</div>
+              </div>
+              <div class="tp-level" id="tpLevel">—</div>
+            </div>
+            <div class="tp-gauge" aria-label="Credits 使用率">
+              <div class="tp-track"><div class="tp-fill" id="tpFill"></div></div>
+              <div class="tp-gauge-labels">
+                <span id="tpUsed">—</span>
+                <span id="tpPct">—</span>
+                <span id="tpQuota">—</span>
+              </div>
+            </div>
+            <div class="metric-grid tp-metrics" id="tpMetrics"></div>
+            <p class="tp-note" id="tpNote"></p>
+          </div>
+        </article>
+      </section>
+
+      <section class="block split">
         <article class="panel">
           <header class="panel-h"><h2>AI 用途拆分</h2></header>
           <div class="table-wrap">

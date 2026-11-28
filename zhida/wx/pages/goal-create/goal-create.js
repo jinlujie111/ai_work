@@ -1,11 +1,17 @@
 const api = require('../../services/api');
+const quota = require('../../utils/quota');
+const goalIntent = require('../../utils/goalIntent');
 
 const STEP_PCT = {
   start: 8,
-  quota: 16,
-  market: 28,
+  intent: 12,
+  intent_ok: 16,
+  intent_llm: 22,
+  intent_llm_ok: 28,
+  quota: 32,
+  market: 38,
   market_hit: 70,
-  llm: 36,
+  llm: 44,
   llm_done: 82,
   fallback: 70,
   save: 92,
@@ -20,7 +26,6 @@ Page({
     profileMinutes: 0,
     loading: false,
     skillsSummary: '',
-    recording: false,
     streamMessage: '',
     streamChars: 0,
     streamPct: 0,
@@ -28,7 +33,6 @@ Page({
   },
 
   onLoad() {
-    this._recorder = null;
     api
       .ensureLogin()
       .then(() =>
@@ -92,49 +96,6 @@ Page({
     this.setData({ baseline: e.detail.value });
   },
 
-  onVoiceStart() {
-    const recorder = wx.getRecorderManager();
-    this._recorder = recorder;
-    recorder.onStart(() => this.setData({ recording: true }));
-    recorder.onError(() => {
-      this.setData({ recording: false });
-      wx.showToast({ title: '录音失败，请手动输入', icon: 'none' });
-    });
-    recorder.onStop(() => {
-      this.setData({ recording: false });
-      wx.showModal({
-        title: '确认语音内容',
-        editable: true,
-        placeholderText: this.data.rawText || '请输入或粘贴语音转写文字',
-        success: (res) => {
-          if (!res.confirm) return;
-          const text = (res.content || '').trim();
-          if (text) this.setData({ rawText: text });
-        }
-      });
-    });
-    try {
-      recorder.start({
-        duration: 60000,
-        sampleRate: 16000,
-        numberOfChannels: 1,
-        format: 'mp3'
-      });
-    } catch (e) {
-      this.setData({ recording: false });
-      wx.showToast({ title: '请手动输入学习目标', icon: 'none' });
-    }
-  },
-
-  onVoiceEnd() {
-    if (!this.data.recording || !this._recorder) return;
-    try {
-      this._recorder.stop();
-    } catch (e) {
-      this.setData({ recording: false });
-    }
-  },
-
   onOpenMine() {
     wx.switchTab({ url: '/pages/mine/mine' });
   },
@@ -143,6 +104,15 @@ Page({
     const rawText = (this.data.rawText || '').trim();
     if (!rawText) {
       wx.showToast({ title: '请先描述学习目标', icon: 'none' });
+      return;
+    }
+    const intent = goalIntent.classifyGoalIntent(rawText);
+    if (!intent.allow_llm) {
+      wx.showModal({
+        title: '仅支持学习技能类',
+        content: intent.reason || goalIntent.REJECT_MSG,
+        showCancel: false
+      });
       return;
     }
     if (this.data.loading) return;
@@ -155,8 +125,17 @@ Page({
     });
     api
       .ensureLogin()
-      .then(() =>
-        api.requestStream({
+      .then(() => api.request({ url: '/api/me' }))
+      .then((me) => {
+        if (quota.isQuotaFull(me)) {
+          this.setData({ loading: false });
+          return quota.goMembership(
+            me.goal_quota && me.goal_quota.message
+              ? me.goal_quota.message
+              : undefined
+          ).then(() => null);
+        }
+        return api.requestStream({
           url: '/api/goals/plan-draft-stream',
           method: 'POST',
           data: {
@@ -164,9 +143,10 @@ Page({
             baseline: this.data.baseline
           },
           onEvent: (ev) => this._pushStream(ev)
-        })
-      )
+        });
+      })
       .then((draft) => {
+        if (!draft) return;
         this.setData({ loading: false, streamPct: 100 });
         const id = draft && draft.goal && draft.goal.id;
         if (!id) {
@@ -183,6 +163,7 @@ Page({
       })
       .catch((err) => {
         this.setData({ loading: false });
+        if (quota.handleQuotaError(err)) return;
         wx.showToast({ title: err.message || '生成失败', icon: 'none' });
       });
   }

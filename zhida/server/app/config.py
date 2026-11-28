@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     minimax_personal_base_url: str = "https://api.minimax.cn/v1"
     minimax_personal_model: str = "MiniMax-M3.1-Flash"
 
+    # 阿里云百炼 / DashScope OpenAI 兼容（Qwen Flash）
+    qwen_personal_api_key: str = ""
+    qwen_personal_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen_personal_model: str = "qwen3.8-flash"
+
     mysql_host: str = "127.0.0.1"
     mysql_port: int = 3306
     mysql_user: str = "root"
@@ -71,10 +76,37 @@ class Settings(BaseSettings):
     # 可选：机器调用仍可用 X-Admin-Token；网页以账号密码为准
     admin_token: str = ""
     # LLM 成本估算（人民币 / 百万 token），默认对齐 DeepSeek Flash 峰值约价×7.2
+    # 切 Qwen3.8-Flash 建议：0.8 / 2.7
     llm_input_cny_per_1m: float = 2.16
     llm_output_cny_per_1m: float = 8.64
     # 月固定成本（服务器等），单位：分；用于利润粗算
     ops_fixed_cost_cents_month: int = 50000
+    # Token Plan 额度监控（0=关闭容量条）；Credits≈标价人民币×credits_per_list_cny
+    token_plan_enabled: bool = True
+    token_plan_name: str = "Lite"
+    token_plan_monthly_credits: int = 20000
+    token_plan_credits_per_list_cny: float = 81.0
+    token_plan_warn_ratio: float = 0.7
+    token_plan_critical_ratio: float = 0.9
+
+    # 各供应商「钱包」预算（元）。0=未设预算，仍展示消耗与日均，但不估剩余/用尽日
+    # 周期：month=自然月重置统计；all=累计自有记录起
+    llm_wallet_period: str = "month"
+    llm_wallet_deepseek_budget_cny: float = 0
+    llm_wallet_qwen_budget_cny: float = 39
+    llm_wallet_minimax_budget_cny: float = 0
+    llm_wallet_other_budget_cny: float = 0
+    # 各钱包单价（元/百万 token）；0 则回退全局 LLM_INPUT/OUTPUT
+    llm_wallet_deepseek_input_cny_per_1m: float = 0
+    llm_wallet_deepseek_output_cny_per_1m: float = 0
+    llm_wallet_qwen_input_cny_per_1m: float = 0.8
+    llm_wallet_qwen_output_cny_per_1m: float = 2.7
+    llm_wallet_minimax_input_cny_per_1m: float = 0
+    llm_wallet_minimax_output_cny_per_1m: float = 0
+    llm_wallet_other_input_cny_per_1m: float = 0
+    llm_wallet_other_output_cny_per_1m: float = 0
+    # 日均消耗回看天数（预计用尽）
+    llm_wallet_burn_lookback_days: int = 7
 
     def is_prod(self) -> bool:
         return (self.app_env or "dev").strip().lower() == "prod"
@@ -122,14 +154,21 @@ class Settings(BaseSettings):
         )
 
     def resolve_llm(self) -> dict:
-        provider = (self.llm_provider or "deepseek").lower()
-        profile = (self.llm_profile or "personal").lower()
+        provider = (self.llm_provider or "deepseek").lower().strip()
+        profile = (self.llm_profile or "personal").lower().strip()
 
         if provider == "minimax":
             return {
                 "api_key": self.minimax_personal_api_key,
                 "base_url": self.minimax_personal_base_url.rstrip("/"),
                 "model": self.llm_model or self.minimax_personal_model,
+            }
+
+        if provider in {"qwen", "dashscope", "aliyun"}:
+            return {
+                "api_key": self.qwen_personal_api_key,
+                "base_url": self.qwen_personal_base_url.rstrip("/"),
+                "model": self.llm_model or self.qwen_personal_model,
             }
 
         if profile == "office":
@@ -144,6 +183,62 @@ class Settings(BaseSettings):
             "base_url": self.deepseek_personal_base_url.rstrip("/"),
             "model": self.llm_model or self.deepseek_personal_model,
         }
+
+    def llm_wallets(self) -> list[dict]:
+        """运营看板用的供应商钱包定义（预算 + 单价）。"""
+        global_in = float(self.llm_input_cny_per_1m)
+        global_out = float(self.llm_output_cny_per_1m)
+
+        def rate(specific: float, fallback: float) -> float:
+            return float(specific) if float(specific or 0) > 0 else fallback
+
+        return [
+            {
+                "id": "deepseek",
+                "label": "DeepSeek",
+                "budget_cny": float(self.llm_wallet_deepseek_budget_cny or 0),
+                "input_cny_per_1m": rate(self.llm_wallet_deepseek_input_cny_per_1m, global_in),
+                "output_cny_per_1m": rate(self.llm_wallet_deepseek_output_cny_per_1m, global_out),
+                "token_plan": False,
+            },
+            {
+                "id": "qwen",
+                "label": "Qwen / 百炼",
+                "budget_cny": float(self.llm_wallet_qwen_budget_cny or 0),
+                "input_cny_per_1m": rate(self.llm_wallet_qwen_input_cny_per_1m, global_in),
+                "output_cny_per_1m": rate(self.llm_wallet_qwen_output_cny_per_1m, global_out),
+                "token_plan": True,
+            },
+            {
+                "id": "minimax",
+                "label": "MiniMax",
+                "budget_cny": float(self.llm_wallet_minimax_budget_cny or 0),
+                "input_cny_per_1m": rate(self.llm_wallet_minimax_input_cny_per_1m, global_in),
+                "output_cny_per_1m": rate(self.llm_wallet_minimax_output_cny_per_1m, global_out),
+                "token_plan": False,
+            },
+            {
+                "id": "other",
+                "label": "其他模型",
+                "budget_cny": float(self.llm_wallet_other_budget_cny or 0),
+                "input_cny_per_1m": rate(self.llm_wallet_other_input_cny_per_1m, global_in),
+                "output_cny_per_1m": rate(self.llm_wallet_other_output_cny_per_1m, global_out),
+                "token_plan": False,
+            },
+        ]
+
+
+def wallet_id_for_model(model: str) -> str:
+    m = (model or "").strip().lower()
+    if not m:
+        return "other"
+    if "qwen" in m or "dashscope" in m:
+        return "qwen"
+    if "minimax" in m:
+        return "minimax"
+    if "deepseek" in m:
+        return "deepseek"
+    return "other"
 
 
 @lru_cache

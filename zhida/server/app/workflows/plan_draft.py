@@ -22,6 +22,7 @@ from ..market_service import (
 )
 from ..skills_service import skills_context_for_plan
 from .fallback import build_plan_fallback, today_str
+from .goal_intent import assert_learning_intent, assert_learning_intent_llm
 from .plan_common import ProgressCb, _emit
 from .plan_graph import normalize_modules, reset_plan_graph, run_plan_graph
 from .plan_persist import _apply_skills_skip
@@ -37,8 +38,44 @@ async def generate_plan_draft(
     daily_minutes: int | None = None,
     on_event: ProgressCb | None = None,
 ) -> dict:
-    """阶段一：先查技能市场；未命中再走 LLM；普遍技能回写入市场。"""
+    """阶段一：关键词拦截 → LLM 意图复核 → 技能市场 → 学习拆解。"""
     await _emit(on_event, {"event": "progress", "step": "start", "message": "开始解析…"})
+    await _emit(on_event, {"event": "progress", "step": "intent", "message": "关键词初筛…"})
+    # 第一关：关键词硬拦截（不调 LLM）
+    intent = assert_learning_intent(raw_text)
+    await _emit(
+        on_event,
+        {
+            "event": "progress",
+            "step": "intent_ok",
+            "message": "关键词通过，准备 AI 复核…",
+            "intent": intent.get("intent"),
+            "label": intent.get("label"),
+        },
+    )
+    # 第二关：LLM 二次意图判断（未过则不进市场/拆解）
+    await _emit(on_event, {"event": "progress", "step": "intent_llm", "message": "AI 二次确认意图…"})
+    intent_llm, intent_meta = await assert_learning_intent_llm(raw_text)
+    db.add(
+        AiUsage(
+            user_id=user.id,
+            purpose="goal_intent",
+            model=intent_meta.get("model", ""),
+            prompt_tokens=int(intent_meta.get("prompt_tokens") or 0),
+            completion_tokens=int(intent_meta.get("completion_tokens") or 0),
+            tokens_accurate=1 if intent_meta.get("tokens_accurate") else 0,
+        )
+    )
+    await _emit(
+        on_event,
+        {
+            "event": "progress",
+            "step": "intent_llm_ok",
+            "message": "已确认为学习技能类",
+            "intent": intent_llm.get("intent"),
+            "label": intent_llm.get("label"),
+        },
+    )
     minutes = int(user.daily_minutes_weekday or daily_minutes or 60)
     skills_ctx = skills_context_for_plan(db, user.id)
     domain = infer_goal_type(raw_text)

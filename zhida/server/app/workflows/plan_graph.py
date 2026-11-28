@@ -7,12 +7,14 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
 from ..llm import LLMError, chat_json
+from .goal_intent import REJECT_MSG, is_llm_rejected
 
 
 class PlanGraphState(TypedDict, total=False):
@@ -114,15 +116,15 @@ def normalize_modules(raw_modules: list | None, *, skill_categories: list | None
 
 async def node_modules(state: PlanGraphState) -> dict:
     """一次 LLM：技能概括 + 使用场景 + 分阶段学习（含材料）。"""
-    system = """你是学习目标拆解器。只输出 JSON：
+    system = """你是学习技能拆解器。系统已确认输入为学习技能类。只输出 JSON：
 {
   "title": "短标题≤16字",
   "description": "一句话目标",
-  "goal_type": "ai|python|english|fitness|generic",
+  "goal_type": "ai|python|english|fitness|office|generic",
   "baseline": "当前基础",
   "total_days": 30,
   "completion_criteria": "可检验标准一句",
-  "skill_overview": "对该目标技能的概括，2~4句，说清是什么、核心能力边界",
+  "skill_overview": "对该技能的概括，2~4句，说清是什么、核心能力边界",
   "skill_scenarios": ["使用场景1", "使用场景2", "使用场景3"],
   "skill_categories": ["大类1"],
   "modules": [
@@ -149,17 +151,21 @@ async def node_modules(state: PlanGraphState) -> dict:
 1. 不要排日历/tasks；modules 正好 3~5 个，按学习顺序。
 2. 每阶段 skills 2~4 个；learn 必填；materials 1~3 条（可无 url，但要有 title）。
 3. skill_overview、skill_scenarios 必填；场景 2~4 条。
-4. 档案已熟练的入门阶段可 skippable=true。
-5. marketable：该技能是否普遍可复用（Python/英语听力/Excel 等为 true；用户私人事/公司内部/一次性述职等为 false）。
-6. marketable=true 时必须给 market_skill_name（短、规范、可入库）。"""
+4. baseline / skills_context 只用于同领域入门 skippable 或补现状，不得改写目标领域。
+5. 只做技能学习拆解；若发现是规划/旅行/办事/闲聊等非学习技能，不要编造 modules，只输出：
+   {"accepted": false, "reject_reason": "当前仅支持学习技能类目标，不支持规划类，请改成「我想学……」"}
+6. marketable：普遍可复用技能为 true；过私/一次性为 false；true 时必须给 market_skill_name。
+7. 合法学习目标可不写 accepted，或 accepted=true。"""
     skills = state.get("skills_context") or []
     hints = state.get("catalog_hints") or []
+    raw = state.get("raw_text") or ""
     user = json.dumps(
         {
-            "raw_text": state["raw_text"],
+            "raw_text": raw,
             "baseline": state.get("baseline") or "",
             "daily_minutes": state.get("daily_minutes") or 60,
             "today": state["today"],
+            "intent": "learning_skill",
             "skills_context": [
                 {
                     "skill_name": s.get("skill_name"),
@@ -186,14 +192,26 @@ async def node_modules(state: PlanGraphState) -> dict:
         on_progress=state.get("on_progress"),
     )
 
+    reject = is_llm_rejected(data)
+    if reject:
+        # ValueError → 前端提示；勿用 LLMError（会落入本地模板误生成）
+        raise ValueError(reject or REJECT_MSG)
+
+    total_days = int(data.get("total_days") or 30)
+    m_days = re.search(r"(\d+)\s*天", raw)
+    if m_days:
+        hinted = max(1, min(int(m_days.group(1)), 90))
+        if abs(total_days - hinted) > 2:
+            total_days = hinted
+
     extracted = {
         "intent": "create_goal",
         "title": data.get("title") or "未命名目标",
         "description": data.get("description") or state.get("raw_text") or "",
-        "goal_type": data.get("goal_type") or "generic",
+        "goal_type": (data.get("goal_type") or "generic").strip() or "generic",
         "baseline": data.get("baseline") or state.get("baseline") or "",
         "daily_minutes": int(data.get("daily_minutes") or state.get("daily_minutes") or 60),
-        "total_days": int(data.get("total_days") or 30),
+        "total_days": total_days,
         "start_date": data.get("start_date") or state["today"],
         "deadline": data.get("deadline") or "",
         "completion_criteria": data.get("completion_criteria") or "",
@@ -334,7 +352,18 @@ async def run_plan_graph(
     }
     try:
         final: PlanGraphState = await app.ainvoke(init)
+    except ValueError:
+        raise
     except Exception as exc:  # noqa: BLE001
+        # LangGraph 可能把节点 ValueError 包一层
+        root = exc
+        while root.__cause__ is not None and root is not root.__cause__:
+            root = root.__cause__
+            if isinstance(root, ValueError):
+                raise root from exc
+        msg = str(exc)
+        if "不像学习目标" in msg or "accepted" in msg.lower():
+            raise ValueError(msg or REJECT_MSG) from exc
         raise LLMError(str(exc)) from exc
 
     draft = final.get("modules_draft") or {}
@@ -498,6 +527,7 @@ def schedule_stages(
                 {
                     "name": task.get("name") or f"任务{ti+1}",
                     "description": desc,
+                    "done_when": (task.get("done_when") or "")[:120],
                     "estimated_minutes": mins,
                     "priority": task.get("priority") or ("high" if global_order == 0 else "normal"),
                     "planned_date": planned,
@@ -548,127 +578,121 @@ async def expand_selected_modules(
     catalog_hints: list | None = None,
     occupied: dict[str, int] | None = None,
     weekend_minutes: int | None = None,
+    skills_context: list | None = None,
     on_progress=None,
 ) -> tuple[dict, dict]:
-    """确认后：把勾选模块展开为任务并排期。"""
-    system = """你是学习任务拆解器。用户已勾选学习模块，请为每个模块生成可执行任务。只输出 JSON：
-{
-  "stages": [
-    {
-      "module_key": "与输入一致的 key",
-      "name": "阶段名（可用模块名）",
-      "sort_order": 0,
-      "tasks": [
-        {
-          "name": "可执行任务名",
-          "description": "说明；点明学哪个技能点/用哪资料",
-          "estimated_minutes": 30,
-          "priority": "high|normal|low",
-          "sort_order": 0,
-          "related_skills": ["技能点"],
-          "depends_on_names": [],
-          "resources": [{"title": "资料名", "type": "doc|course|book|video|practice|tool|repo", "note": "", "url": ""}]
-        }
-      ]
-    }
-  ],
-  "reason": "拆任务理由"
-}
-硬性规则：
-1. 只为给定 modules 生成 stages，顺序与输入一致；module_key 必须原样回传。
-2. 每模块 2~4 个任务；单任务时长 ≤ daily_minutes；任务应对齐该模块的 skills / learn。
-3. 不要排日期（系统会排）。任务尽量带 1 条 resources；可复用模块 materials。
-4. 每条任务必须标注 priority：关键路径/阶段首任务用 high，巩固练习用 normal，拓展选做用 low。"""
-    user = json.dumps(
-        {
-            "goal_title": goal_title,
-            "goal_description": goal_description,
-            "baseline": baseline,
-            "daily_minutes": daily_minutes,
-            "start_date": start_date,
-            "deadline": deadline,
-            "modules": selected_modules,
-            "catalog_hints": (catalog_hints or [])[:6],
-        },
-        ensure_ascii=False,
+    """确认后：把勾选模块展开为可执行任务并排期。"""
+    from .task_expand_quality import (
+        EXPAND_RETRY_HINT,
+        EXPAND_SYSTEM,
+        build_fallback_stages,
+        build_upcoming_preview,
+        sanitize_stages,
+        stages_quality_report,
     )
-    data, meta = await chat_json(
-        system,
-        user,
-        purpose="plan_expand",
-        max_tokens=4096,
-        temperature=0.2,
-        on_progress=on_progress,
-    )
-    raw_stages = data.get("stages") or []
-    if not raw_stages:
-        # 兜底：按模块 skills 生成简单任务
-        raw_stages = []
-        for si, m in enumerate(selected_modules):
-            skills = m.get("skills") or [m.get("learn") or m.get("name")]
-            tasks = []
-            for ti, sk in enumerate(skills[:3]):
-                tasks.append(
-                    {
-                        "name": f"学习：{sk}",
-                        "description": m.get("learn") or "",
-                        "estimated_minutes": min(daily_minutes, 45),
-                        "priority": "high" if si == 0 and ti == 0 else "normal",
-                        "sort_order": ti,
-                        "related_skills": [sk],
-                        "resources": [],
-                    }
-                )
-            raw_stages.append(
-                {
-                    "module_key": m.get("key"),
-                    "name": m.get("name"),
-                    "sort_order": si,
-                    "tasks": tasks,
-                }
-            )
 
-    # 对齐 module_key / skippable；任务缺资料时补上阶段 materials
-    by_key = {m.get("key"): m for m in selected_modules}
-    aligned = []
-    for si, st in enumerate(raw_stages):
-        key = st.get("module_key") or (selected_modules[si]["key"] if si < len(selected_modules) else "")
-        mod = by_key.get(key) or (selected_modules[si] if si < len(selected_modules) else {})
-        mats = list(mod.get("materials") or [])
-        learn = (mod.get("learn") or "").strip()
-        tasks = []
-        for ti, t in enumerate(st.get("tasks") or []):
-            if not isinstance(t, dict):
-                continue
-            item = dict(t)
-            if learn and not (item.get("description") or "").strip():
-                item["description"] = learn
-            if not item.get("resources") and mats:
-                item["resources"] = [mats[ti % len(mats)]]
-            tasks.append(item)
-        aligned.append(
+    daily = max(15, int(daily_minutes or 60))
+    user_payload = {
+        "goal_title": goal_title,
+        "goal_description": goal_description,
+        "baseline": baseline,
+        "daily_minutes": daily,
+        "start_date": start_date,
+        "deadline": deadline,
+        "modules": selected_modules,
+        "catalog_hints": (catalog_hints or [])[:6],
+        "skills_context": [
             {
-                **st,
-                "module_key": key,
-                "name": st.get("name") or mod.get("name") or f"模块{si+1}",
-                "skippable": bool(mod.get("skippable")),
-                "skip_reason": mod.get("skip_reason") or "",
-                "sort_order": si,
-                "tasks": tasks,
+                "skill_name": s.get("skill_name"),
+                "level": s.get("level"),
+                "level_label": s.get("level_label"),
             }
+            for s in (skills_context or [])[:6]
+            if isinstance(s, dict)
+        ],
+        "guidance": "已会的技能不要再拆入门空壳任务；优先最小可动手实验。",
+    }
+
+    data: dict = {}
+    meta: dict = {
+        "model": "",
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "tokens_accurate": False,
+        "purpose": "plan_expand",
+    }
+    raw_stages: list = []
+    quality_notes: list[str] = []
+
+    try:
+        data, meta = await chat_json(
+            EXPAND_SYSTEM,
+            json.dumps(user_payload, ensure_ascii=False),
+            purpose="plan_expand",
+            max_tokens=4096,
+            temperature=0.2,
+            on_progress=on_progress,
         )
+        raw_stages = data.get("stages") or []
+        report = stages_quality_report(raw_stages, daily_minutes=daily)
+        if raw_stages and not report["ok"]:
+            quality_notes.append(
+                f"首轮可执行率不足(bad={report['bad']}/{report['total']})，重试一次"
+            )
+            retry_payload = {
+                **user_payload,
+                "retry_hint": EXPAND_RETRY_HINT,
+                "bad_samples": report.get("samples") or [],
+            }
+            data2, meta2 = await chat_json(
+                EXPAND_SYSTEM + "\n" + EXPAND_RETRY_HINT,
+                json.dumps(retry_payload, ensure_ascii=False),
+                purpose="plan_expand_retry",
+                max_tokens=4096,
+                temperature=0.15,
+                on_progress=on_progress,
+            )
+            meta = {
+                **meta,
+                "prompt_tokens": int(meta.get("prompt_tokens") or 0)
+                + int(meta2.get("prompt_tokens") or 0),
+                "completion_tokens": int(meta.get("completion_tokens") or 0)
+                + int(meta2.get("completion_tokens") or 0),
+                "retried": True,
+            }
+            raw_stages = data2.get("stages") or raw_stages
+            data = data2
+    except LLMError:
+        raw_stages = []
+        quality_notes.append("llm_failed_use_fallback")
+
+    if not raw_stages:
+        raw_stages = build_fallback_stages(selected_modules, daily_minutes=daily)
+        data = {"reason": "本地可执行模板展开", "stages": raw_stages}
+        quality_notes.append("used_executable_fallback")
+
+    aligned = sanitize_stages(
+        raw_stages,
+        selected_modules=selected_modules,
+        daily_minutes=daily,
+    )
 
     scheduled, final_deadline, warnings = schedule_stages(
         stages=aligned,
-        daily_minutes=daily_minutes,
+        daily_minutes=daily,
         start_date=start_date,
         deadline=deadline,
         occupied=occupied,
         weekend_minutes=weekend_minutes,
     )
+    # 排期后把 done_when 写回 description 已在 sanitize；补 preview
+    warnings = list(warnings or [])
+    warnings.extend(quality_notes)
+    upcoming = build_upcoming_preview(scheduled, days=3)
     return {
         "stages": scheduled,
         "deadline": final_deadline,
-        "reason": data.get("reason") or "按所选模块展开任务",
+        "reason": data.get("reason") or "按所选模块展开可执行任务",
         "warnings": warnings,
+        "upcoming_preview": upcoming,
     }, meta

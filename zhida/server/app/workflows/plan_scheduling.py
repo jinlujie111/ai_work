@@ -6,10 +6,16 @@ from sqlalchemy.orm import Session
 
 from ..models import Goal, Task, User
 from .fallback import today_str
+from .inbox import INBOX_GOAL_TYPE
 from .plan_graph import day_capacity
 
 
 _TASK_PRIORITY_ORDER = {"high": 0, "normal": 1, "low": 2}
+
+
+def _learning_goal_filter():
+    """学习目标任务才参与容量占用与冲突重排；收集箱并行、不冲突处理。"""
+    return Goal.goal_type != INBOX_GOAL_TYPE
 
 
 def user_day_capacity(user: User, date_str: str, *, fallback: int = 60) -> int:
@@ -36,6 +42,7 @@ def occupied_minutes_by_day(
             Task.user_id == user_id,
             Task.status != "cancelled",
             Goal.status == "active",
+            _learning_goal_filter(),
         )
     )
     if exclude_goal_id is not None:
@@ -73,7 +80,11 @@ def apply_goal_priority_order(
 
     actives = (
         db.query(Goal)
-        .filter(Goal.user_id == user.id, Goal.status == "active")
+        .filter(
+            Goal.user_id == user.id,
+            Goal.status == "active",
+            _learning_goal_filter(),
+        )
         .order_by(Goal.priority_rank.asc(), Goal.id.asc())
         .all()
     )
@@ -114,6 +125,7 @@ def rebalance_user_open_tasks(db: Session, user: User, *, from_date: str | None 
             Task.user_id == uid,
             Task.status.in_(("todo", "deferred", "doing")),
             Goal.status == "active",
+            _learning_goal_filter(),
         )
         .all()
     )
@@ -146,6 +158,7 @@ def rebalance_user_open_tasks(db: Session, user: User, *, from_date: str | None 
             Task.status == "done",
             Task.planned_date >= start,
             Goal.status == "active",
+            _learning_goal_filter(),
         )
     )
     for t in done_q.all():
@@ -215,6 +228,7 @@ def day_open_minutes(db: Session, user: User, date_str: str) -> int:
             Task.planned_date == date_str,
             Task.status != "cancelled",
             Goal.status == "active",
+            _learning_goal_filter(),
         )
         .all()
     )

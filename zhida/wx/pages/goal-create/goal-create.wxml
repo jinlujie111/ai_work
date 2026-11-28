@@ -7,26 +7,12 @@
   <textarea
     class="area"
     maxlength="500"
-    placeholder="我想学……"
+    placeholder="我想学……例如：Python 数据分析、雅思口语"
     value="{{rawText}}"
     bindinput="onInput"
     auto-height
     disabled="{{loading}}"
   />
-  <view class="voice-row">
-    <button
-      class="zd-btn zd-btn--ghost voice-btn {{recording ? 'voice-btn--on' : ''}}"
-      bind:touchstart="onVoiceStart"
-      bind:touchend="onVoiceEnd"
-      bind:touchcancel="onVoiceEnd"
-      disabled="{{loading}}"
-    >{{recording ? '松手结束' : '按住说话'}}</button>
-  </view>
-
-  <view class="field">
-    <view class="field__label">当前基础</view>
-    <input class="input" placeholder="" value="{{baseline}}" bindinput="onBaseline" disabled="{{loading}}" />
-  </view>
 
   <button class="zd-btn zd-btn--primary zd-btn--block" bind:tap="onGenerate" loading="{{loading}}" disabled="{{loading}}">生成草案</button>
 

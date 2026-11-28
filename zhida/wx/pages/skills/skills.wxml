@@ -1,45 +1,94 @@
 <view class="page page--plain skills">
+  <view class="top">
+    <view class="top__title">技能档案</view>
+    <view class="top__actions">
+      <view class="top__add" hover-class="top__add--press" bind:tap="onAdd">添加</view>
+      <view class="top__more" hover-class="top__more--press" bind:tap="onExport">导出</view>
+    </view>
+  </view>
+
   <view class="tabs">
-    <view class="tab {{tab === 'list' ? 'tab--on' : ''}}" data-tab="list" bind:tap="onTab">列表</view>
+    <view class="tab {{tab === 'list' ? 'tab--on' : ''}}" data-tab="list" bind:tap="onTab">技能</view>
     <view class="tab {{tab === 'graph' ? 'tab--on' : ''}}" data-tab="graph" bind:tap="onTab">图谱</view>
   </view>
 
-  <view class="hero">
-    <view class="zd-title">技能档案</view>
-    <view class="zd-muted" wx:if="{{limitText}}">{{limitText}}</view>
-  </view>
-
   <block wx:if="{{tab === 'list'}}">
-    <view class="skill" wx:for="{{items}}" wx:key="id">
-      <view class="skill__top">
-        <view class="skill__name">{{item.skill_name}}</view>
-        <text class="skill__lv">L{{item.level}} {{item.level_label}}</text>
+    <scroll-view scroll-x class="filters" enable-flex wx:if="{{domainTabs.length > 1}}">
+      <view
+        class="filter {{activeDomain === item.key ? 'filter--on' : ''}}"
+        wx:for="{{domainTabs}}"
+        wx:key="key"
+        data-key="{{item.key}}"
+        bind:tap="onFilter"
+      >{{item.label}}</view>
+    </scroll-view>
+
+    <block wx:if="{{sections.length}}">
+      <view class="sec" wx:for="{{sections}}" wx:key="domain" wx:for-item="sec">
+        <view class="sec__lab">{{sec.domain}}</view>
+        <view
+          class="row"
+          wx:for="{{sec.items}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bind:tap="onOpenSkill"
+          hover-class="row--press"
+        >
+          <text class="row__name">{{item.name}}</text>
+          <text class="row__go">›</text>
+        </view>
       </view>
-      <view class="zd-muted">{{item.domain}} · {{item.source}}</view>
-      <view class="zd-body" wx:if="{{item.evidence}}" style="margin-top:10rpx">{{item.evidence}}</view>
-      <view class="ops">
-        <text class="link" data-name="{{item.skill_name}}" bind:tap="onEdit">调整程度</text>
-        <text class="link link--warn" data-id="{{item.id}}" bind:tap="onArchive">归档</text>
-      </view>
+    </block>
+
+    <view class="void" wx:else>
+      <view class="void__title">还没有技能</view>
+      <view class="void__hint">点右上角「添加」，或完成学习目标后写入</view>
     </view>
-    <button class="zd-btn zd-btn--primary zd-btn--block" style="margin-top:24rpx" bind:tap="onAdd">添加技能</button>
   </block>
 
   <block wx:else>
-    <view class="domain" wx:for="{{domains}}" wx:key="name">
-      <view class="domain__top">
-        <view class="domain__name">{{item.name}}</view>
-        <text class="zd-muted">{{item.count}} · 均 L{{item.avg_level}}</text>
-      </view>
-      <view class="nodes">
-        <text class="node" wx:for="{{item.nodes}}" wx:for-item="n" wx:key="id">{{n.name}} L{{n.level}}</text>
+    <view class="graph-card" wx:for="{{domains}}" wx:key="name">
+      <view class="graph-card__name">{{item.name}}</view>
+      <view class="graph-card__nodes">
+        <text class="graph-node" wx:for="{{item.nodes}}" wx:for-item="n" wx:key="id">{{n.name}}</text>
       </view>
     </view>
-    <view class="zd-sec" wx:if="{{edges.length}}">
-      <view class="zd-sec__head">关系</view>
-      <view class="zd-muted line" wx:for="{{edges}}" wx:key="idx">{{item.label}}</view>
+    <view class="void" wx:if="{{!domains.length}}">
+      <view class="void__title">暂无图谱</view>
     </view>
   </block>
 
-  <button class="zd-btn zd-btn--ghost zd-btn--block" style="margin-top:24rpx" bind:tap="onExport">导出 JSON</button>
+  <view class="sd-mask" wx:if="{{detail}}" bind:tap="onCloseDetail" catchtouchmove="noop">
+    <view class="sd" catch:tap="noop">
+      <view class="sd__grip"></view>
+      <view class="sd__bar">
+        <text class="sd__domain">{{detail.domain}}</text>
+        <text class="sd__x" bind:tap="onCloseDetail">关闭</text>
+      </view>
+      <view class="sd__name">{{detail.name}}</view>
+      <view class="sd__level" wx:if="{{detail.primary}}">L{{detail.level}} · {{detail.level_label}}</view>
+
+      <view class="sd__goals" wx:if="{{detail.goals.length}}">
+        <view class="sd__lab">学习目标</view>
+        <view class="sd__goal" wx:for="{{detail.goals}}" wx:key="*this">{{item}}</view>
+      </view>
+
+      <view class="sd__ops" wx:if="{{detail.primary}}">
+        <view class="sd__btn" data-name="{{detail.primary.skill_name}}" bind:tap="onEdit">调整程度</view>
+        <view class="sd__btn sd__btn--ghost" data-id="{{detail.primary.id}}" bind:tap="onArchive">归档</view>
+      </view>
+
+      <view class="sd__sec" wx:if="{{detail.modules.length}}">
+        <view class="sd__lab">已掌握模块</view>
+        <view class="sd__mod" wx:for="{{detail.modules}}" wx:key="id">
+          <text class="sd__mod-name">{{item.skill_name}}</text>
+          <view class="sd__mod-ops">
+            <text class="link" data-name="{{item.skill_name}}" bind:tap="onEdit">调整</text>
+            <text class="link link--warn" data-id="{{item.id}}" bind:tap="onArchive">归档</text>
+          </view>
+        </view>
+      </view>
+      <view class="sd__empty" wx:elif="{{detail.primary}}">完成学习阶段后，模块会出现在这里</view>
+    </view>
+  </view>
 </view>

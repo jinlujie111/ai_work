@@ -60,11 +60,41 @@
   white-space: nowrap;
 }
 
+.ts__chip--inbox {
+  background: var(--accent-soft);
+  border-color: rgba(126, 196, 192, 0.28);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .ts__chip--prio {
   background: var(--accent-soft);
   border-color: rgba(126, 196, 192, 0.28);
   color: var(--accent);
   font-weight: 600;
+}
+
+.ts__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding: 22rpx 24rpx;
+  margin-bottom: 8rpx;
+  border-radius: 22rpx;
+  background: var(--panel-2);
+  border: 1rpx solid var(--border);
+}
+
+.ts__meta-k {
+  font-size: 22rpx;
+  color: var(--ink-3);
+}
+
+.ts__meta-v {
+  font-size: 30rpx;
+  font-weight: 620;
+  color: var(--ink-1);
+  font-variant-numeric: tabular-nums;
 }
 
 .ts__chip--prio-low {

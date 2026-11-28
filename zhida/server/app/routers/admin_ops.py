@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
+from ..config import get_settings, wallet_id_for_model
 from ..db import get_db
 from ..models import (
     AiUsage,
@@ -392,6 +392,348 @@ def ops_summary(
         )
     by_purpose.sort(key=lambda x: x["total_tokens"], reverse=True)
 
+    settings = get_settings()
+    llm_cfg = settings.resolve_llm()
+    in_rate = float(settings.llm_input_cny_per_1m)
+    out_rate = float(settings.llm_output_cny_per_1m)
+    credits_per_cny = float(settings.token_plan_credits_per_list_cny or 0)
+
+    def _cny(pt: int, ct: int) -> float:
+        return round(pt / 1_000_000 * in_rate + ct / 1_000_000 * out_rate, 4)
+
+    def _credits(cny: float) -> float:
+        if credits_per_cny <= 0:
+            return 0.0
+        return round(cny * credits_per_cny, 2)
+
+    # 自然月用量（Token Plan 按订阅月重置；此处用日历月作运营粗监控）
+    month_start = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_filter = and_(AiUsage.created_at >= month_start, AiUsage.created_at <= end, _ACCURATE)
+    month_pt, month_ct = _token_sums((month_filter,))
+    month_calls = (
+        db.query(func.count(AiUsage.id)).filter(month_filter).scalar() or 0
+    )
+    range_cny = _cny(ai_prompt_r, ai_comp_r)
+    month_cny = _cny(month_pt, month_ct)
+    range_credits = _credits(range_cny)
+    month_credits = _credits(month_cny)
+
+    # 单次完整规划（modules + expand）均值 → 估免费用户容量
+    purpose_avg = {r["purpose"]: r for r in by_purpose}
+    modules = purpose_avg.get("plan_modules") or {}
+    expand = purpose_avg.get("plan_expand") or {}
+
+    def _avg_pair(row: dict, fallback_pt: int, fallback_ct: int) -> tuple[int, int]:
+        calls = int(row.get("accurate_calls") or 0)
+        if calls <= 0:
+            return fallback_pt, fallback_ct
+        return int(round(int(row.get("prompt_tokens") or 0) / calls)), int(
+            round(int(row.get("completion_tokens") or 0) / calls)
+        )
+
+    m_pt, m_ct = _avg_pair(modules, 413, 1366)
+    e_pt, e_ct = _avg_pair(expand, 1153, 2276)
+    per_goal_pt, per_goal_ct = m_pt + e_pt, m_ct + e_ct
+    per_goal_cny = _cny(per_goal_pt, per_goal_ct)
+    per_goal_credits = _credits(per_goal_cny)
+    per_free_user_credits = round(per_goal_credits * FREE_GOAL_LIMIT, 2)
+    plan_quota = int(settings.token_plan_monthly_credits or 0)
+    plan_enabled = bool(settings.token_plan_enabled) and plan_quota > 0 and credits_per_cny > 0
+    util = round(month_credits / plan_quota, 4) if plan_enabled and plan_quota else None
+    remaining = round(max(0.0, plan_quota - month_credits), 2) if plan_enabled else None
+    users_capacity = (
+        int(plan_quota // per_free_user_credits) if plan_enabled and per_free_user_credits > 0 else None
+    )
+    users_remaining = (
+        int(remaining // per_free_user_credits)
+        if plan_enabled and remaining is not None and per_free_user_credits > 0
+        else None
+    )
+    level = "ok"
+    if util is not None:
+        if util >= float(settings.token_plan_critical_ratio):
+            level = "critical"
+        elif util >= float(settings.token_plan_warn_ratio):
+            level = "warn"
+
+    token_plan = {
+        "enabled": plan_enabled,
+        "name": settings.token_plan_name or "Lite",
+        "monthly_credits": plan_quota,
+        "credits_per_list_cny": credits_per_cny,
+        "month_start": month_start.isoformat(),
+        "month_prompt_tokens": month_pt,
+        "month_completion_tokens": month_ct,
+        "month_total_tokens": month_pt + month_ct,
+        "month_accurate_calls": int(month_calls),
+        "month_list_cny_estimate": month_cny,
+        "month_credits_estimate": month_credits,
+        "remaining_credits_estimate": remaining,
+        "utilization": util,
+        "level": level if plan_enabled else "off",
+        "warn_ratio": float(settings.token_plan_warn_ratio),
+        "critical_ratio": float(settings.token_plan_critical_ratio),
+        "per_goal": {
+            "prompt_tokens": per_goal_pt,
+            "completion_tokens": per_goal_ct,
+            "list_cny_estimate": per_goal_cny,
+            "credits_estimate": per_goal_credits,
+            "definition": "区间内 plan_modules + plan_expand 准确调用均值（无样本时用经验值）",
+        },
+        "per_free_user_credits_estimate": per_free_user_credits,
+        "free_goal_limit": FREE_GOAL_LIMIT,
+        "users_capacity_estimate": users_capacity,
+        "users_remaining_estimate": users_remaining,
+        "definition": "Credits 由真实 token×配置单价估算，非百炼实扣；用尽规则以控制台为准",
+    }
+    cost_estimate = {
+        "input_cny_per_1m": in_rate,
+        "output_cny_per_1m": out_rate,
+        "range_list_cny": range_cny,
+        "range_credits": range_credits,
+        "month_list_cny": month_cny,
+        "month_credits": month_credits,
+        "provider": (settings.llm_provider or "").lower(),
+        "model": llm_cfg.get("model") or "",
+        "definition": "按 .env 单价估算标价成本，不是网关实收账单",
+    }
+
+    # —— 各模型 / 钱包：消耗、剩余预算、预计用尽 ——
+    wallet_period = (settings.llm_wallet_period or "month").lower().strip()
+    lookback = max(1, int(settings.llm_wallet_burn_lookback_days or 7))
+    burn_start = end - timedelta(days=lookback)
+    if wallet_period == "all":
+        wallet_period_start = None
+        period_filter = (_ACCURATE,)
+    else:
+        wallet_period_start = month_start
+        period_filter = (AiUsage.created_at >= month_start, AiUsage.created_at <= end, _ACCURATE)
+
+    wallet_defs = {w["id"]: w for w in settings.llm_wallets()}
+
+    def _rate_for(wid: str) -> tuple[float, float]:
+        w = wallet_defs.get(wid) or wallet_defs["other"]
+        return float(w["input_cny_per_1m"]), float(w["output_cny_per_1m"])
+
+    def _cny_wallet(wid: str, pt: int, ct: int) -> float:
+        rin, rout = _rate_for(wid)
+        return round(pt / 1_000_000 * rin + ct / 1_000_000 * rout, 4)
+
+    model_period_rows = (
+        db.query(
+            AiUsage.model,
+            func.count(AiUsage.id),
+            func.coalesce(func.sum(AiUsage.prompt_tokens), 0),
+            func.coalesce(func.sum(AiUsage.completion_tokens), 0),
+        )
+        .filter(*period_filter)
+        .group_by(AiUsage.model)
+        .all()
+    )
+    model_burn_rows = (
+        db.query(
+            AiUsage.model,
+            func.coalesce(func.sum(AiUsage.prompt_tokens), 0),
+            func.coalesce(func.sum(AiUsage.completion_tokens), 0),
+        )
+        .filter(AiUsage.created_at >= burn_start, AiUsage.created_at <= end, _ACCURATE)
+        .group_by(AiUsage.model)
+        .all()
+    )
+    burn_by_model = {
+        (m or "") or "unknown": (int(pt), int(ct)) for m, pt, ct in model_burn_rows
+    }
+
+    models_out: list[dict] = []
+    wallet_acc: dict[str, dict] = {
+        wid: {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "calls": 0,
+            "spent_cny": 0.0,
+            "burn_prompt": 0,
+            "burn_completion": 0,
+            "models": [],
+        }
+        for wid in wallet_defs
+    }
+
+    for model, n, pt, ct in model_period_rows:
+        name = (model or "").strip() or "unknown"
+        wid = wallet_id_for_model(name)
+        pt_i, ct_i = int(pt), int(ct)
+        spent = _cny_wallet(wid, pt_i, ct_i)
+        bpt, bct = burn_by_model.get(name, (0, 0))
+        # unknown key fallback
+        if (bpt, bct) == (0, 0) and name == "unknown":
+            bpt, bct = burn_by_model.get("", (0, 0))
+        burn_cny = _cny_wallet(wid, bpt, bct)
+        daily_burn = round(burn_cny / lookback, 4)
+        wallet_acc[wid]["prompt_tokens"] += pt_i
+        wallet_acc[wid]["completion_tokens"] += ct_i
+        wallet_acc[wid]["calls"] += int(n)
+        wallet_acc[wid]["spent_cny"] = round(wallet_acc[wid]["spent_cny"] + spent, 4)
+        wallet_acc[wid]["burn_prompt"] += bpt
+        wallet_acc[wid]["burn_completion"] += bct
+        models_out.append(
+            {
+                "model": name,
+                "wallet_id": wid,
+                "calls": int(n),
+                "prompt_tokens": pt_i,
+                "completion_tokens": ct_i,
+                "total_tokens": pt_i + ct_i,
+                "spent_cny": spent,
+                "daily_burn_cny": daily_burn,
+                "input_cny_per_1m": _rate_for(wid)[0],
+                "output_cny_per_1m": _rate_for(wid)[1],
+            }
+        )
+
+    # 无周期消耗但有回看烧钱的模型也列出来
+    seen_models = {m["model"] for m in models_out}
+    for name, (bpt, bct) in burn_by_model.items():
+        label = name or "unknown"
+        if label in seen_models:
+            continue
+        wid = wallet_id_for_model(label)
+        burn_cny = _cny_wallet(wid, bpt, bct)
+        models_out.append(
+            {
+                "model": label,
+                "wallet_id": wid,
+                "calls": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "spent_cny": 0.0,
+                "daily_burn_cny": round(burn_cny / lookback, 4),
+                "input_cny_per_1m": _rate_for(wid)[0],
+                "output_cny_per_1m": _rate_for(wid)[1],
+            }
+        )
+
+    wallets_out: list[dict] = []
+    for wdef in settings.llm_wallets():
+        wid = wdef["id"]
+        acc = wallet_acc[wid]
+        budget = float(wdef["budget_cny"] or 0)
+        spent = round(float(acc["spent_cny"]), 4)
+        has_budget = budget > 0
+        remaining = round(max(0.0, budget - spent), 4) if has_budget else None
+        util = round(spent / budget, 4) if has_budget else None
+        burn_cny = _cny_wallet(wid, acc["burn_prompt"], acc["burn_completion"])
+        daily_burn = round(burn_cny / lookback, 4)
+        days_left = None
+        exhaust_at = None
+        if has_budget and remaining is not None and daily_burn > 0:
+            days_left = round(remaining / daily_burn, 1)
+            exhaust_at = (now + timedelta(days=days_left)).date().isoformat()
+        elif has_budget and remaining is not None and remaining <= 0:
+            days_left = 0.0
+            exhaust_at = "已用尽"
+        elif has_budget and remaining is not None and daily_burn <= 0:
+            days_left = None
+            exhaust_at = "消耗过低，暂无法预估"
+
+        level = "off"
+        if has_budget and util is not None:
+            if util >= float(settings.token_plan_critical_ratio) or (remaining is not None and remaining <= 0):
+                level = "critical"
+            elif util >= float(settings.token_plan_warn_ratio):
+                level = "warn"
+            else:
+                level = "ok"
+        elif spent > 0 or daily_burn > 0:
+            level = "ok"
+
+        # Token Plan：Credits 折算金额与预算取更紧
+        credits_remaining = None
+        credits_cny_remaining = None
+        if wdef.get("token_plan") and plan_enabled:
+            tp_rem_credits = token_plan.get("remaining_credits_estimate")
+            if tp_rem_credits is not None and credits_per_cny > 0:
+                credits_remaining = float(tp_rem_credits)
+                credits_cny_remaining = round(credits_remaining / credits_per_cny, 4)
+                if remaining is None:
+                    remaining = credits_cny_remaining
+                    has_budget = True
+                    budget = max(budget, float(token_plan.get("month_list_cny_estimate") or 0) + credits_cny_remaining)
+                else:
+                    remaining = round(min(remaining, credits_cny_remaining), 4)
+                if daily_burn > 0 and remaining is not None:
+                    days_left = round(remaining / daily_burn, 1)
+                    exhaust_at = (now + timedelta(days=days_left)).date().isoformat()
+                elif remaining is not None and remaining <= 0:
+                    days_left = 0.0
+                    exhaust_at = "已用尽"
+                if budget > 0:
+                    util = round(spent / budget, 4) if budget else util
+                    if util is not None:
+                        if util >= float(settings.token_plan_critical_ratio) or remaining <= 0:
+                            level = "critical"
+                        elif util >= float(settings.token_plan_warn_ratio):
+                            level = "warn"
+                        else:
+                            level = "ok"
+
+        wallet_models = [m for m in models_out if m["wallet_id"] == wid]
+        for m in wallet_models:
+            m_days = None
+            m_eta = None
+            if remaining is not None and m["daily_burn_cny"] > 0:
+                m_days = round(remaining / m["daily_burn_cny"], 1)
+                m_eta = (now + timedelta(days=m_days)).date().isoformat()
+            elif remaining is not None and remaining <= 0:
+                m_days = 0.0
+                m_eta = "已用尽"
+            m["remaining_cny"] = remaining
+            m["days_left"] = m_days
+            m["exhaust_at"] = m_eta
+            m["budget_cny"] = budget if budget > 0 else None
+
+        provider = (settings.llm_provider or "").lower().strip()
+        active = wid == wallet_id_for_model(llm_cfg.get("model") or "") or wid == provider
+        if provider in {"dashscope", "aliyun"} and wid == "qwen":
+            active = True
+
+        wallets_out.append(
+            {
+                "id": wid,
+                "label": wdef["label"],
+                "budget_cny": budget if budget > 0 else None,
+                "has_budget": bool(budget > 0 or remaining is not None),
+                "spent_cny": spent,
+                "remaining_cny": remaining,
+                "utilization": util,
+                "level": level,
+                "daily_burn_cny": daily_burn,
+                "days_left": days_left,
+                "exhaust_at": exhaust_at,
+                "prompt_tokens": acc["prompt_tokens"],
+                "completion_tokens": acc["completion_tokens"],
+                "total_tokens": acc["prompt_tokens"] + acc["completion_tokens"],
+                "calls": acc["calls"],
+                "input_cny_per_1m": wdef["input_cny_per_1m"],
+                "output_cny_per_1m": wdef["output_cny_per_1m"],
+                "token_plan": bool(wdef.get("token_plan")),
+                "credits_remaining_estimate": credits_remaining,
+                "credits_cny_remaining_estimate": credits_cny_remaining,
+                "models": sorted(wallet_models, key=lambda x: x["spent_cny"], reverse=True),
+                "active": active,
+            }
+        )
+
+    models_out.sort(key=lambda x: x["spent_cny"], reverse=True)
+    llm_wallets_payload = {
+        "period": wallet_period,
+        "period_start": wallet_period_start.isoformat() if wallet_period_start else None,
+        "burn_lookback_days": lookback,
+        "wallets": wallets_out,
+        "models": models_out,
+        "definition": "消耗=真实 token×各钱包单价；剩余=预算−消耗（Qwen 另参考 Token Plan Credits）；用尽日=剩余/近N日日均。非网关实收余额。",
+    }
+
     # —— 收入：仅 status=paid 为真实收款；dev_paid 为开发测试，不计入收入/毛利 ——
     orders_q = db.query(
         func.count(MembershipOrder.id),
@@ -684,7 +1026,9 @@ def ops_summary(
         "data_policy": {
             "revenue": "仅 MembershipOrder.status=paid（真实支付）",
             "test_orders": "status=dev_paid 仅展示、不计入收入",
-            "ai": "仅接口返回的真实 token；不按单价折算成「真实成本」",
+            "ai": "仅接口返回的真实 token；金额/Credits 为按配置单价的估算，非实收账单",
+            "token_plan": "Token Plan 容量条用自然月真实 token 估算 Credits，阈值百炼控制台",
+            "wallets": "各模型消耗/剩余/用尽日按钱包预算与近N日日均估算；改 .env 预算后重启生效",
             "note": "无模拟打平、无开发订单充作收入",
         },
         "users": {
@@ -731,6 +1075,9 @@ def ops_summary(
             "total_tokens_all": ai_prompt_all + ai_comp_all,
             "by_purpose": by_purpose,
             "per_user": ai_user_cost,
+            "cost_estimate": cost_estimate,
+            "token_plan": token_plan,
+            "wallets": llm_wallets_payload,
         },
         "revenue": {
             "orders_all": int(orders_all[0] or 0),

@@ -13,7 +13,14 @@ from ..auth import get_current_user
 from ..db import SessionLocal, get_db
 from ..models import Goal, GoalStage, PlanVersion, Task, User
 from ..query_helpers import load_stages_by_goal, load_tasks_by_goal
-from ..schemas import GoalConfirmIn, GoalPauseIn, GoalPriorityIn, GoalResumeIn, PlanCreateIn
+from ..schemas import (
+    GoalConfirmIn,
+    GoalExpandPreviewIn,
+    GoalPauseIn,
+    GoalPriorityIn,
+    GoalResumeIn,
+    PlanCreateIn,
+)
 from ..timeutil import utc_now
 from ..workflows.plan import (
     apply_goal_priority_order,
@@ -23,6 +30,7 @@ from ..workflows.plan import (
     serialize_goal,
     serialize_task,
 )
+from ..workflows.plan_confirm import preview_goal_from_modules
 
 router = APIRouter(prefix="/api/goals", tags=["goals"])
 
@@ -54,9 +62,11 @@ def _extract_task_patches(snapshot: dict) -> list[dict]:
 
 @router.get("")
 def list_goals(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from ..workflows.inbox import INBOX_GOAL_TYPE
+
     goals = (
         db.query(Goal)
-        .filter(Goal.user_id == user.id)
+        .filter(Goal.user_id == user.id, Goal.goal_type != INBOX_GOAL_TYPE)
         .order_by(Goal.priority_rank.asc(), Goal.id.desc())
         .all()
     )
@@ -268,6 +278,7 @@ async def confirm_goal_stream(
                     goal,
                     selected_module_keys=list(keys or []),
                     goal_priority_order=body.goal_priority_order,
+                    drop_task_keys=body.drop_task_keys,
                     on_event=on_event,
                 )
                 await queue.put({"event": "done", "data": result})
@@ -337,6 +348,7 @@ async def confirm_goal(
                 goal,
                 selected_module_keys=list(keys or []),
                 goal_priority_order=body.goal_priority_order,
+                drop_task_keys=body.drop_task_keys,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -393,6 +405,30 @@ async def confirm_goal(
     rebalance_user_open_tasks(db, user)
     db.commit()
     return {"ok": True, "status": "active"}
+
+
+@router.post("/{goal_id}/expand-preview")
+async def expand_preview(
+    goal_id: int,
+    body: GoalExpandPreviewIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """确认前预览：展开任务并返回近 3 天任务，不写入日历。"""
+    goal = db.get(Goal, goal_id)
+    if not goal or goal.user_id != user.id:
+        raise HTTPException(status_code=404, detail="not found")
+    if goal.status not in {"planning", "active"}:
+        raise HTTPException(status_code=400, detail="goal not previewable")
+    try:
+        return await preview_goal_from_modules(
+            db,
+            user,
+            goal,
+            selected_module_keys=list(body.selected_module_keys or []),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/priority")

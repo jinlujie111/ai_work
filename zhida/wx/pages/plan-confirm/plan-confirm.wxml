@@ -100,6 +100,30 @@
     </view>
   </view>
 
+  <view class="card" wx:if="{{previewReady}}">
+    <view class="card__head">
+      <text class="card__no">预览</text>
+      <text class="card__title">近 3 天任务</text>
+      <text class="card__meta">保留 {{previewKept}}/{{previewTasks.length}}</text>
+    </view>
+    <view class="card__hint">点掉做不到的任务，再写入日历。任务应带明确完成标准。</view>
+    <view
+      class="prev {{item.selected ? 'prev--on' : ''}}"
+      wx:for="{{previewTasks}}"
+      wx:key="key"
+      data-key="{{item.key}}"
+      bind:tap="onTogglePreviewTask"
+    >
+      <view class="prev__date">{{item.date}}</view>
+      <view class="prev__body">
+        <view class="prev__name">{{item.name}}</view>
+        <view class="prev__meta">{{item.estimated_minutes}} 分 · {{item.stage_name}}</view>
+        <view class="prev__done" wx:if="{{item.done_when}}">完成：{{item.done_when}}</view>
+      </view>
+      <view class="prev__check {{item.selected ? 'prev__check--on' : ''}}"></view>
+    </view>
+  </view>
+
   <view class="foot-space"></view>
 
   <view class="stream-mask" wx:if="{{confirming}}" catchtouchmove="noop">
@@ -125,7 +149,8 @@
       bind:tap="onConfirm"
       loading="{{confirming}}"
       disabled="{{confirming}}"
-    >{{confirming ? 'AI 写入日程中…' : '确认并写入日程'}}</button>
+    >{{confirming ? (previewReady ? 'AI 写入日程中…' : 'AI 拆解预览中…') : (previewReady ? '确认写入日程' : '生成近 3 天预览')}}</button>
+    <text class="dock__ghost" wx:if="{{previewReady}}" bind:tap="onPreview">重新预览</text>
     <text class="dock__ghost" bind:tap="onReject">放弃</text>
   </view>
 </view>

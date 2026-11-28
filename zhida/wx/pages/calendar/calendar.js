@@ -2,27 +2,37 @@ const api = require('../../services/api');
 const { confirmSkillProposals } = require('../../utils/skills');
 
 function mapTask(t) {
-  const resources = (t.resources || []).map((r) => ({
-    title: r.title || '学习材料',
-    note: r.note || r.desc || '',
-    url: r.url || ''
-  }));
+  const isInbox = !!(t.is_inbox || t.goal_type === 'inbox' || t.source === 'quick');
+  const resources = isInbox
+    ? []
+    : (t.resources || []).map((r) => ({
+        title: r.title || '学习材料',
+        note: r.note || r.desc || '',
+        url: r.url || ''
+      }));
   const priority = (t.priority || 'normal').toLowerCase();
-  const priorityLabel =
-    priority === 'high' ? '高优' : priority === 'low' ? '可延后' : '';
+  const priorityLabel = isInbox
+    ? ''
+    : priority === 'high'
+      ? '高优'
+      : priority === 'low'
+        ? '可延后'
+        : '';
   return {
     id: t.id,
     name: t.name,
     status: t.status,
     estimatedMinutes: t.estimated_minutes,
-    goalTitle: t.goal_title,
+    goalTitle: t.goal_title || (isInbox ? '收集箱' : ''),
     goalId: t.goal_id,
-    stageNo: t.stage_no || 0,
-    stageTotal: t.stage_total || 0,
+    plannedDate: t.planned_date || '',
+    stageNo: isInbox ? 0 : t.stage_no || 0,
+    stageTotal: isInbox ? 0 : t.stage_total || 0,
     stageName: t.stage_name || '',
-    learnContent: t.learn_content || '',
-    priority,
+    learnContent: isInbox ? '' : t.learn_content || '',
+    priority: isInbox ? 'normal' : priority,
     priorityLabel,
+    isInbox,
     resources
   };
 }
@@ -42,7 +52,8 @@ Page({
     dayMinutes: 0,
     byDate: {},
     activeGoals: [],
-    detail: null
+    detail: null,
+    quickAddOpen: false
   },
 
   onShow() {
@@ -64,7 +75,11 @@ Page({
 
   _applyDay(date, byDate) {
     const items = (byDate[date] || []).slice();
-    const dayMinutes = items.reduce((s, t) => s + (t.estimatedMinutes || 0), 0);
+    // 收集箱快速待办不计入当日学习时长合计
+    const dayMinutes = items.reduce(
+      (s, t) => s + (t.isInbox ? 0 : t.estimatedMinutes || 0),
+      0
+    );
     this.setData({
       selected: date,
       selectedLabel: this._label(date),
@@ -166,15 +181,17 @@ Page({
         id: task.id,
         name: task.name,
         status: task.status,
-        goalTitle: task.goalTitle,
-        stageNo: task.stageNo,
-        stageTotal: task.stageTotal,
-        stageName: task.stageName,
-        stagePct,
-        learnContent: this._cleanLearn(task.learnContent),
+        goalTitle: task.goalTitle || (task.isInbox ? '收集箱' : ''),
+        isInbox: !!task.isInbox,
+        plannedDate: task.plannedDate || this.data.selected || '',
+        stageNo: task.isInbox ? 0 : task.stageNo,
+        stageTotal: task.isInbox ? 0 : task.stageTotal,
+        stageName: task.isInbox ? '' : task.stageName,
+        stagePct: task.isInbox ? 0 : stagePct,
+        learnContent: task.isInbox ? '' : this._cleanLearn(task.learnContent),
         priority: task.priority || 'normal',
-        priorityLabel: task.priorityLabel || '普通',
-        resources: task.resources || []
+        priorityLabel: task.isInbox ? '' : task.priorityLabel || '',
+        resources: task.isInbox ? [] : task.resources || []
       }
     });
   },
@@ -226,63 +243,15 @@ Page({
   },
 
   onAddTask() {
-    const goals = this.data.activeGoals || [];
-    const date = this.data.selected || this.data.today;
-    if (!goals.length) {
-      wx.showModal({
-        title: '还没有进行中的目标',
-        confirmText: '去创建',
-        success: (res) => {
-          if (res.confirm) wx.navigateTo({ url: '/pages/goal-create/goal-create' });
-        }
-      });
-      return;
-    }
-    const pickGoal = () =>
-      new Promise((resolve, reject) => {
-        if (goals.length === 1) {
-          resolve(goals[0]);
-          return;
-        }
-        wx.showActionSheet({
-          itemList: goals.map((g) => g.title),
-          success: (res) => resolve(goals[res.tapIndex]),
-          fail: reject
-        });
-      });
+    this.setData({ quickAddOpen: true });
+  },
 
-    pickGoal()
-      .then((goal) => {
-        wx.showModal({
-          title: '添加任务',
-          editable: true,
-          placeholderText: '任务名称',
-          success: (res) => {
-            if (!res.confirm) return;
-            const name = (res.content || '').trim();
-            if (!name) {
-              wx.showToast({ title: '请输入任务名', icon: 'none' });
-              return;
-            }
-            api
-              .request({
-                url: '/api/tasks',
-                method: 'POST',
-                data: {
-                  goal_id: goal.id,
-                  name,
-                  planned_date: date,
-                  estimated_minutes: 30
-                }
-              })
-              .then(() => {
-                wx.showToast({ title: '已添加', icon: 'success' });
-                this.refresh();
-              })
-              .catch((err) => wx.showToast({ title: err.message || '添加失败', icon: 'none' }));
-          }
-        });
-      })
-      .catch(() => {});
+  onQuickAddClose() {
+    this.setData({ quickAddOpen: false });
+  },
+
+  onQuickAddCreated() {
+    this.setData({ quickAddOpen: false });
+    this.refresh();
   }
 });

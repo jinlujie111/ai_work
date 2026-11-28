@@ -33,6 +33,12 @@ class GoalConfirmIn(BaseModel):
     selected_stage_ids: list[int] | None = None
     # 多目标学习优先级：goal id 从高到低；确认后按此重排日历
     goal_priority_order: list[int] | None = None
+    # 预览阶段去掉的任务 key（date|idx|name）
+    drop_task_keys: list[str] | None = None
+
+
+class GoalExpandPreviewIn(BaseModel):
+    selected_module_keys: list[str] = Field(min_length=1)
 
 
 class GoalPriorityIn(BaseModel):
@@ -73,6 +79,16 @@ class TaskCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     planned_date: str | None = None
     estimated_minutes: int = 30
+    description: str = ""
+    priority: str = "normal"
+
+
+class TaskQuickCreateIn(BaseModel):
+    """Todoist 式快速添加：不绑学习目标拆解，不触发冲突重排。"""
+
+    name: str = Field(min_length=1, max_length=255)
+    planned_date: str | None = None
+    estimated_minutes: int = 25
     description: str = ""
     priority: str = "normal"
 

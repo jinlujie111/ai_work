@@ -1,4 +1,5 @@
 const api = require('../../services/api');
+const quota = require('../../utils/quota');
 
 Page({
   data: {
@@ -81,6 +82,7 @@ Page({
       .catch((err) => {
         wx.hideLoading();
         this.setData({ using: false });
+        if (quota.handleQuotaError(err)) return;
         wx.showToast({ title: err.message || '选用失败', icon: 'none' });
       });
   }

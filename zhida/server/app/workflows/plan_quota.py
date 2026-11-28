@@ -24,7 +24,14 @@ def _is_member(user: User) -> bool:
 
 def count_quota_goals(db: Session, user_id: int) -> int:
     # 含已终止：硬删除会漏计历史名额，故放弃/终止一律软终止留档
-    return db.query(Goal).filter(Goal.user_id == user_id).count()
+    # 收集箱（快速待办）不占学习目标免费名额
+    from .inbox import INBOX_GOAL_TYPE
+
+    return (
+        db.query(Goal)
+        .filter(Goal.user_id == user_id, Goal.goal_type != INBOX_GOAL_TYPE)
+        .count()
+    )
 
 
 def goal_quota_info(db: Session, user: User) -> dict:

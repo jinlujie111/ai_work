@@ -60,10 +60,11 @@
             <text class="prio-tag prio-tag--{{item.priority}}" wx:if="{{item.priorityLabel}}">{{item.priorityLabel}}</text>
           </view>
           <view class="row__name">{{item.name}}</view>
-          <view class="row__mins">
+          <view class="row__mins" wx:if="{{!item.isInbox}}">
             <text wx:if="{{item.stageNo}}">第 {{item.stageNo}}/{{item.stageTotal}} 阶段 · </text>
             {{item.estimatedMinutes}} 分
           </view>
+          <view class="row__mins" wx:else>快速待办</view>
         </view>
         <view class="row__more" wx:if="{{item.status !== 'done'}}" data-id="{{item.id}}" catch:tap="onMore">···</view>
       </view>
@@ -78,50 +79,66 @@
 
   <view class="fab" bind:tap="onAddTask">+</view>
 
+  <quick-add
+    open="{{quickAddOpen}}"
+    defaultDate="{{today}}"
+    bind:close="onQuickAddClose"
+    bind:created="onQuickAddCreated"
+  />
+
   <view class="ts-mask" wx:if="{{detail}}" bind:tap="onCloseDetail">
     <view class="ts" catch:tap="noop">
       <view class="ts__grip"></view>
       <scroll-view scroll-y class="ts__scroll" style="max-height: 62vh;">
         <view class="ts__chips">
-          <view class="ts__chip">{{detail.goalTitle}}</view>
-          <view class="ts__chip {{detail.priority === 'low' ? 'ts__chip--prio-low' : 'ts__chip--prio'}}" wx:if="{{detail.priorityLabel}}">{{detail.priorityLabel}}</view>
+          <view class="ts__chip {{detail.isInbox ? 'ts__chip--inbox' : ''}}">{{detail.goalTitle}}</view>
+          <view class="ts__chip {{detail.priority === 'low' ? 'ts__chip--prio-low' : 'ts__chip--prio'}}" wx:if="{{!detail.isInbox && detail.priorityLabel}}">{{detail.priorityLabel}}</view>
         </view>
         <view class="ts__title">{{detail.name}}</view>
 
-        <view class="ts__stage" wx:if="{{detail.stageNo}}">
-          <view class="ts__stage-top">
-            <text class="ts__stage-lab">所属阶段</text>
-            <text class="ts__stage-frac">{{detail.stageNo}} / {{detail.stageTotal}}</text>
+        <block wx:if="{{detail.isInbox}}">
+          <view class="ts__meta" wx:if="{{detail.plannedDate}}">
+            <text class="ts__meta-k">安排日期</text>
+            <text class="ts__meta-v">{{detail.plannedDate}}</text>
           </view>
-          <view class="ts__stage-name">{{detail.stageName}}</view>
-          <view class="ts__stage-track">
-            <view class="ts__stage-fill" style="width: {{detail.stagePct}}%;"></view>
-          </view>
-        </view>
+        </block>
 
-        <view class="ts__sec">
-          <view class="ts__sec-lab"><view class="ts__sec-dot"></view>学习内容</view>
-          <view class="ts__learn" wx:if="{{detail.learnContent}}">{{detail.learnContent}}</view>
-        </view>
-
-        <view class="ts__sec">
-          <view class="ts__sec-lab"><view class="ts__sec-dot"></view>学习材料</view>
-          <block wx:if="{{detail.resources.length}}">
-            <view class="ts__mat" wx:for="{{detail.resources}}" wx:key="title">
-              <view class="ts__mat-ico">材</view>
-              <view class="ts__mat-body">
-                <text class="ts__mat-title">{{item.title}}</text>
-                <text class="ts__mat-note" wx:if="{{item.note}}">{{item.note}}</text>
-              </view>
-              <view
-                class="ts__mat-btn {{item.url ? '' : 'ts__mat-btn--ghost'}}"
-                data-url="{{item.url}}"
-                catch:tap="onCopyResource"
-              >{{item.url ? '复制' : '无链接'}}</view>
+        <block wx:else>
+          <view class="ts__stage" wx:if="{{detail.stageNo}}">
+            <view class="ts__stage-top">
+              <text class="ts__stage-lab">所属阶段</text>
+              <text class="ts__stage-frac">{{detail.stageNo}} / {{detail.stageTotal}}</text>
             </view>
-          </block>
-          <view class="ts__empty" wx:else>暂无链接材料</view>
-        </view>
+            <view class="ts__stage-name">{{detail.stageName}}</view>
+            <view class="ts__stage-track">
+              <view class="ts__stage-fill" style="width: {{detail.stagePct}}%;"></view>
+            </view>
+          </view>
+
+          <view class="ts__sec">
+            <view class="ts__sec-lab"><view class="ts__sec-dot"></view>学习内容</view>
+            <view class="ts__learn" wx:if="{{detail.learnContent}}">{{detail.learnContent}}</view>
+          </view>
+
+          <view class="ts__sec">
+            <view class="ts__sec-lab"><view class="ts__sec-dot"></view>学习材料</view>
+            <block wx:if="{{detail.resources.length}}">
+              <view class="ts__mat" wx:for="{{detail.resources}}" wx:key="title">
+                <view class="ts__mat-ico">材</view>
+                <view class="ts__mat-body">
+                  <text class="ts__mat-title">{{item.title}}</text>
+                  <text class="ts__mat-note" wx:if="{{item.note}}">{{item.note}}</text>
+                </view>
+                <view
+                  class="ts__mat-btn {{item.url ? '' : 'ts__mat-btn--ghost'}}"
+                  data-url="{{item.url}}"
+                  catch:tap="onCopyResource"
+                >{{item.url ? '复制' : '无链接'}}</view>
+              </view>
+            </block>
+            <view class="ts__empty" wx:else>暂无链接材料</view>
+          </view>
+        </block>
       </scroll-view>
       <view class="ts__foot">
         <view class="ts__btn ts__btn--ghost" bind:tap="onCloseDetail">关闭</view>
