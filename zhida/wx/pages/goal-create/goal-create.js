@@ -1,6 +1,7 @@
 const api = require('../../services/api');
 const quota = require('../../utils/quota');
 const goalIntent = require('../../utils/goalIntent');
+const goalNav = require('../../utils/goalNav');
 
 const STEP_PCT = {
   start: 8,
@@ -148,18 +149,12 @@ Page({
       .then((draft) => {
         if (!draft) return;
         this.setData({ loading: false, streamPct: 100 });
-        const id = draft && draft.goal && draft.goal.id;
-        if (!id) {
-          wx.showToast({ title: '草案无效', icon: 'none' });
-          return;
-        }
         const src = (draft.analysis && draft.analysis.source) || '';
-        if (src === 'market') {
+        const reused = !!(draft.analysis && draft.analysis.reused);
+        if (src === 'market' && !reused) {
           wx.showToast({ title: '已从技能市场匹配', icon: 'success' });
         }
-        wx.redirectTo({
-          url: `/pages/plan-confirm/plan-confirm?id=${id}`
-        });
+        goalNav.openDraftOrGoal(draft, { redirect: true });
       })
       .catch((err) => {
         this.setData({ loading: false });

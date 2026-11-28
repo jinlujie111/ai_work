@@ -1099,3 +1099,99 @@ def ops_summary(
         "metrics": {"p0": p0, "p1": p1, "p2": p2},
         "series": series,
     }
+
+
+# ── 技能市场审核（上线 / 下线）────────────────────────────────────────────
+
+class MarketStatusIn(BaseModel):
+    status: str = Field(description="pending | active | offline")
+
+
+@router.get("/market/skills")
+def ops_market_skills(
+    status: str | None = Query(None, description="pending|active|offline|空=全部"),
+    q: str = Query(""),
+    domain: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=200),
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..market_service import (
+        MARKET_STATUS_LABEL,
+        list_market_items_admin,
+        market_status_counts,
+        serialize_market_item,
+    )
+
+    items = list_market_items_admin(
+        db, status=status, q=q, domain=domain, limit=limit
+    )
+    return {
+        "ok": True,
+        "counts": market_status_counts(db),
+        "status_labels": MARKET_STATUS_LABEL,
+        "items": [serialize_market_item(it, detail=False) for it in items],
+    }
+
+
+@router.get("/market/skills/{item_id}")
+def ops_market_skill_detail(
+    item_id: int,
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..market_service import serialize_market_item
+
+    item = db.get(SkillMarketItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="技能不存在")
+    return {"ok": True, "item": serialize_market_item(item, detail=True)}
+
+
+@router.post("/market/skills/{item_id}/online")
+def ops_market_skill_online(
+    item_id: int,
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..market_service import serialize_market_item, set_market_item_status
+
+    try:
+        item = set_market_item_status(db, item_id, "active")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    return {"ok": True, "item": serialize_market_item(item)}
+
+
+@router.post("/market/skills/{item_id}/offline")
+def ops_market_skill_offline(
+    item_id: int,
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..market_service import serialize_market_item, set_market_item_status
+
+    try:
+        item = set_market_item_status(db, item_id, "offline")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    return {"ok": True, "item": serialize_market_item(item)}
+
+
+@router.post("/market/skills/{item_id}/status")
+def ops_market_skill_set_status(
+    item_id: int,
+    body: MarketStatusIn,
+    _: str = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from ..market_service import serialize_market_item, set_market_item_status
+
+    try:
+        item = set_market_item_status(db, item_id, body.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return {"ok": True, "item": serialize_market_item(item)}

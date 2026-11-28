@@ -1,6 +1,16 @@
 const api = require('./services/api');
 const config = require('./utils/config');
 
+function isDevOrTrialClient() {
+  try {
+    const info = wx.getAccountInfoSync();
+    const v = (info.miniProgram && info.miniProgram.envVersion) || '';
+    return v === 'develop' || v === 'trial';
+  } catch (e) {
+    return false;
+  }
+}
+
 App({
   globalData: {
     config,
@@ -14,12 +24,20 @@ App({
     if (this.globalData.forceLoggedOut) return;
     this.ensureLogin().catch((err) => {
       console.warn('login failed', err);
-      wx.showToast({
-        title: (err && err.message) || '微信登录失败',
-        icon: 'none',
-        duration: 2500
-      });
+      // 开发者工具里避免一启动就弹失败；「我的」页点登录再提示
+      if (!isDevOrTrialClient()) {
+        wx.showToast({
+          title: (err && err.message) || '微信登录失败',
+          icon: 'none',
+          duration: 2500
+        });
+      }
     });
+  },
+
+  _allowDevFallback() {
+    if (config.allowDevLoginFallback) return true;
+    return isDevOrTrialClient();
   },
 
   ensureLogin() {
@@ -58,16 +76,38 @@ App({
 
     return new Promise((resolve, reject) => {
       const failOrDev = (err) => {
-        if (!config.allowDevLoginFallback) {
+        if (!this._allowDevFallback()) {
           reject(err || new Error('login failed'));
           return;
         }
-        devLogin().then(applySession).then(resolve).catch(reject);
+        // 开发环境：先问服务端是否开了 dev-login，再回退
+        api
+          .request({ url: '/api/auth/mode', method: 'GET', auth: false })
+          .then((mode) => {
+            if (mode && mode.dev_login_enabled === false) {
+              throw err || new Error('开发登录未开启');
+            }
+            return devLogin();
+          })
+          .catch(() => {
+            // mode 接口失败时仍尝试一次（兼容旧后端）
+            return devLogin();
+          })
+          .then(applySession)
+          .then(resolve)
+          .catch(reject);
       };
 
-      if (!config.preferWxLogin) {
-        failOrDev();
-        return;
+      // 开发者工具优先走稳定的 dev-login，避免 wx.code 与服务器密钥不一致
+      if (!config.preferWxLogin || isDevOrTrialClient()) {
+        if (this._allowDevFallback()) {
+          failOrDev();
+          return;
+        }
+        if (!config.preferWxLogin) {
+          failOrDev(new Error('未开启微信登录'));
+          return;
+        }
       }
 
       wx.login({

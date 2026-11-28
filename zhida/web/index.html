@@ -48,6 +48,7 @@
         <button type="button" class="nav-item" data-jump="metrics-p1">P1 指标</button>
         <button type="button" class="nav-item" data-jump="metrics-p2">P2 指标</button>
         <button type="button" class="nav-item" data-jump="ai">AI / Token Plan</button>
+        <button type="button" class="nav-item" data-jump="market">技能市场</button>
       </nav>
       <div class="rail-foot">
         <button type="button" class="btn-ghost" id="logoutBtn">退出登录</button>
@@ -201,6 +202,49 @@
             </div>
             <div class="metric-grid tp-metrics" id="tpMetrics"></div>
             <p class="tp-note" id="tpNote"></p>
+          </div>
+        </article>
+      </section>
+
+      <section id="market" class="block">
+        <article class="panel">
+          <header class="panel-h">
+            <h2>技能市场审核</h2>
+            <span class="muted" id="marketMeta">LLM 新技能默认待上线，上线后才进小程序市场</span>
+          </header>
+          <div class="market-toolbar">
+            <div class="seg" role="group" aria-label="技能状态" id="marketStatusSeg">
+              <button type="button" data-mstatus="" class="is-on">全部</button>
+              <button type="button" data-mstatus="pending">待上线</button>
+              <button type="button" data-mstatus="active">已上线</button>
+              <button type="button" data-mstatus="offline">已下线</button>
+            </div>
+            <input
+              id="marketQ"
+              class="market-search"
+              type="search"
+              placeholder="搜索技能名 / 标题"
+              autocomplete="off"
+            />
+            <button type="button" class="btn" id="marketRefreshBtn">刷新</button>
+          </div>
+          <div class="market-counts" id="marketCounts"></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>技能</th>
+                  <th>分类</th>
+                  <th>来源</th>
+                  <th class="num">模块</th>
+                  <th class="num">使用</th>
+                  <th>状态</th>
+                  <th>更新</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="marketBody"></tbody>
+            </table>
           </div>
         </article>
       </section>

@@ -29,16 +29,23 @@ def _selected_modules(goal: Goal, selected_module_keys: list[str]) -> tuple[list
 
 
 def _resolve_deadline(goal: Goal, selected: list[dict], start: str, weekday: int) -> str:
-    deadline = (goal.deadline or "").strip()
-    if not deadline or deadline <= start:
-        from ..market_service import estimate_module_days
-        from .fallback import add_days
+    """写入/预览日历前的截止日：用户明示周期优先，否则按勾选模块难度重估。"""
+    from ..market_service import estimate_module_days
+    from .fallback import add_days
+    from .plan_graph import parse_user_duration_days
 
-        deadline = add_days(
-            start,
-            estimate_module_days(selected, daily_minutes=weekday),
-        )
-        goal.deadline = deadline
+    # 只用 description（多为用户原文），避免标题里的「烧烤入门30天」被当成用户意图
+    user_days = parse_user_duration_days(goal.description or "")
+    estimated = estimate_module_days(selected, daily_minutes=weekday)
+    if user_days is not None and user_days > 0:
+        deadline = add_days(start, user_days)
+    elif user_days == -1:
+        deadline = (goal.deadline or "").strip()
+        if not deadline or deadline <= start:
+            deadline = add_days(start, estimated)
+    else:
+        deadline = add_days(start, estimated)
+    goal.deadline = deadline
     return deadline
 
 

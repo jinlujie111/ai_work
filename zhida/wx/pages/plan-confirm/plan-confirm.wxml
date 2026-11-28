@@ -67,7 +67,9 @@
           <view class="mats__lab">学习材料</view>
           <view class="mat" wx:for="{{item.materials}}" wx:for-item="mat" wx:key="title">
             <text class="mat__title">{{mat.title}}</text>
-            <text class="mat__note" wx:if="{{mat.note}}">{{mat.note}}</text>
+            <text class="mat__note" wx:if="{{mat.origin}}">出处 · {{mat.origin}}</text>
+            <text class="mat__note" wx:if="{{mat.howto_find}}">找法 · {{mat.howto_find}}</text>
+            <text class="mat__note" wx:elif="{{mat.note}}">{{mat.note}}</text>
             <text class="mat__link" wx:if="{{mat.url}}" data-url="{{mat.url}}" catch:tap="onCopyUrl">复制链接</text>
           </view>
         </view>

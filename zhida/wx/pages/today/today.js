@@ -1,4 +1,5 @@
 const api = require('../../services/api');
+const materialOrigin = require('../../utils/materialOrigin');
 const { confirmSkillProposals } = require('../../utils/skills');
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
@@ -35,6 +36,7 @@ Page({
     weekDays: [],
     weekCount: 0,
     detail: null,
+    matDetail: null,
     quickAddOpen: false
   },
 
@@ -108,7 +110,11 @@ Page({
         const tasks = (todayData.items || []).map((t) => {
           const resources = (t.resources || []).map((r) => ({
             title: r.title || '学习材料',
+            typeLabel: r.type_label || r.type || '资料',
             note: r.note || r.desc || '',
+            content: r.content || '',
+            origin: r.origin || '',
+            howtoFind: r.howto_find || r.howtoFind || '',
             url: r.url || ''
           }));
           const isInbox = !!(t.is_inbox || t.goal_type === 'inbox' || t.source === 'quick');
@@ -194,13 +200,43 @@ Page({
   },
 
   onCloseDetail() {
-    this.setData({ detail: null });
+    this.setData({ detail: null, matDetail: null });
   },
 
   noop() {},
 
+  onOpenResource(e) {
+    const idx = e.currentTarget.dataset.index;
+    const item = ((this.data.detail && this.data.detail.resources) || [])[idx];
+    if (!item) return;
+    const content =
+      (item.content || '').trim() ||
+      (item.note || '').trim() ||
+      (this.data.detail && this.data.detail.learnContent) ||
+      '暂无详细学习说明';
+    const origin = materialOrigin.resolveOrigin(item);
+    const howtoFind = materialOrigin.resolveHowto(item, origin);
+    this.setData({
+      matDetail: {
+        title: item.title || '学习资料',
+        typeLabel: item.typeLabel || '资料',
+        note: (item.note || '').trim(),
+        content,
+        origin,
+        howtoFind,
+        url: item.url || ''
+      }
+    });
+  },
+
+  onCloseMat() {
+    this.setData({ matDetail: null });
+  },
+
   onCopyResource(e) {
-    const url = e.currentTarget.dataset.url;
+    const url =
+      e.currentTarget.dataset.url ||
+      (this.data.matDetail && this.data.matDetail.url);
     if (!url) {
       wx.showToast({ title: '暂无链接', icon: 'none' });
       return;
@@ -208,6 +244,21 @@ Page({
     wx.setClipboardData({
       data: url,
       success: () => wx.showToast({ title: '链接已复制', icon: 'success' })
+    });
+  },
+
+  onCopyHowto(e) {
+    const text =
+      e.currentTarget.dataset.text ||
+      (this.data.matDetail && this.data.matDetail.howtoFind) ||
+      '';
+    if (!text) {
+      wx.showToast({ title: '暂无查找说明', icon: 'none' });
+      return;
+    }
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: '已复制查找方式', icon: 'success' })
     });
   },
 

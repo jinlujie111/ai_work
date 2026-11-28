@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const { confirmSkillProposals } = require('../../utils/skills');
+const materialOrigin = require('../../utils/materialOrigin');
 
 const STATUS_LABEL = {
   planning: '待确认',
@@ -22,8 +23,11 @@ Page({
     chartBars: [],
     sharing: false,
     shareCode: '',
-    shareTitle: ''
+    shareTitle: '',
+    resDetail: null
   },
+
+  noop() {},
 
   onLoad(q) {
     this.setData({ goalId: q.id });
@@ -68,7 +72,17 @@ Page({
             deadline: data.goal.deadline,
             status: data.goal.status
           },
-          resources: data.goal.resources || [],
+          resources: (data.goal.resources || []).map((r) => ({
+            title: r.title || '学习资料',
+            type: r.type || 'doc',
+            type_label: r.type_label || r.type || '资料',
+            note: r.note || '',
+            content: r.content || '',
+            origin: r.origin || '',
+            howto_find: r.howto_find || '',
+            url: r.url || '',
+            stage_name: r.stage_name || ''
+          })),
           learningPath: {
             summary: (data.goal.learning_path || {}).summary || '',
             knowledge: (data.goal.learning_path || {}).knowledge || [],
@@ -107,12 +121,59 @@ Page({
       .catch(() => this.setData({ goal: null }));
   },
 
+  onOpenResource(e) {
+    const idx = e.currentTarget.dataset.index;
+    const item = (this.data.resources || [])[idx];
+    if (!item) return;
+    const typeLabel = item.type_label || item.type || '资料';
+    const content =
+      (item.content || '').trim() ||
+      (item.note || '').trim() ||
+      '暂无详细学习说明，可结合阶段任务练习。';
+    const origin = materialOrigin.resolveOrigin(item);
+    const howtoFind = materialOrigin.resolveHowto(item, origin);
+    this.setData({
+      resDetail: {
+        title: item.title || '学习资料',
+        typeLabel,
+        note: (item.note || '').trim(),
+        content,
+        origin,
+        howtoFind,
+        url: item.url || '',
+        stageName: item.stage_name || ''
+      }
+    });
+  },
+
+  onCloseResource() {
+    this.setData({ resDetail: null });
+  },
+
   onCopyUrl(e) {
-    const url = e.currentTarget.dataset.url;
-    if (!url) return;
+    const url = e.currentTarget.dataset.url || (this.data.resDetail && this.data.resDetail.url);
+    if (!url) {
+      wx.showToast({ title: '暂无外部链接', icon: 'none' });
+      return;
+    }
     wx.setClipboardData({
       data: url,
       success: () => wx.showToast({ title: '链接已复制', icon: 'success' })
+    });
+  },
+
+  onCopyHowto(e) {
+    const text =
+      e.currentTarget.dataset.text ||
+      (this.data.resDetail && this.data.resDetail.howtoFind) ||
+      '';
+    if (!text) {
+      wx.showToast({ title: '暂无查找说明', icon: 'none' });
+      return;
+    }
+    wx.setClipboardData({
+      data: text,
+      success: () => wx.showToast({ title: '已复制查找方式', icon: 'success' })
     });
   },
 

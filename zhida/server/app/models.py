@@ -45,6 +45,8 @@ class Goal(Base):
     modules_json = Column(Text, default="{}")
     # 规划来源：market / langgraph / fallback / local（运营命中率）
     plan_source = Column(String(32), default="", index=True)
+    # 来自技能市场时记录，用于去重（0=无）
+    market_item_id = Column(Integer, default=0, index=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
@@ -202,7 +204,8 @@ class SkillMarketItem(Base):
     scope = Column(String(16), default="universal")  # universal only
     source = Column(String(32), default="seed")  # seed / llm / admin
     use_count = Column(Integer, default=0)
-    status = Column(String(16), default="active", index=True)
+    # pending=待上线(LLM入库) / active=已上线 / offline=已下线
+    status = Column(String(16), default="pending", index=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 

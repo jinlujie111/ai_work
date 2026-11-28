@@ -211,6 +211,19 @@ def get_goal(goal_id: int, user: User = Depends(get_current_user), db: Session =
         for ag in active_goals
     ]
     need_priority = goal.status == "planning" and len(active_list) >= 1
+    expand_preview = None
+    if goal.status == "planning":
+        from ..workflows.plan_serialize import _parse_modules_blob
+        from ..workflows.task_expand_quality import build_upcoming_preview
+
+        blob = _parse_modules_blob(getattr(goal, "modules_json", None))
+        cached = blob.get("_expand_preview") if isinstance(blob.get("_expand_preview"), dict) else None
+        if cached and isinstance(cached.get("stages"), list) and cached.get("stages"):
+            expand_preview = {
+                "selected_module_keys": list(cached.get("selected_module_keys") or []),
+                "deadline": cached.get("deadline") or goal.deadline,
+                "upcoming_preview": build_upcoming_preview(cached.get("stages") or [], days=3),
+            }
     return {
         "goal": g,
         "stages": stage_list,
@@ -221,6 +234,7 @@ def get_goal(goal_id: int, user: User = Depends(get_current_user), db: Session =
         "phase": "scheduled" if stage_list else "modules",
         "active_goals": active_list,
         "need_priority": need_priority,
+        "expand_preview": expand_preview,
     }
 
 

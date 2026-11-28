@@ -18,6 +18,128 @@ TYPE_LABEL = {
     "repo": "仓库",
 }
 
+# 出处必须落到具体平台/站点/软件，禁止「学习资料」这类空话
+_BAD_ORIGIN = re.compile(
+    r"^(学习资料|资料|推荐资料|公开资料|相关资料|参考资料|材料|内容)"
+    r"(（|\(|$)|请按查找|按查找方式"
+)
+
+_HOST_ORIGIN = {
+    "bilibili.com": "B站（bilibili）",
+    "youtube.com": "YouTube",
+    "youtu.be": "YouTube",
+    "zhihu.com": "知乎",
+    "xiaohongshu.com": "小红书",
+    "douyin.com": "抖音",
+    "ixigua.com": "西瓜视频",
+    "iqiyi.com": "爱奇艺",
+    "youku.com": "优酷",
+    "tencent.com": "腾讯视频",
+    "v.qq.com": "腾讯视频",
+    "docs.qq.com": "腾讯文档",
+    "docs.google.com": "Google 文档",
+    "notion.so": "Notion",
+    "feishu.cn": "飞书文档",
+    "yuque.com": "语雀",
+    "jianshu.com": "简书",
+    "csdn.net": "CSDN",
+    "juejin.cn": "掘金",
+    "github.com": "GitHub",
+    "gitee.com": "Gitee",
+    "wikipedia.org": "维基百科",
+    "baike.baidu.com": "百度百科",
+    "zhihuishu.com": "智慧树",
+    "icourse163.org": "中国大学MOOC",
+    "coursera.org": "Coursera",
+    "edx.org": "edX",
+    "udemy.com": "Udemy",
+    "fast.ai": "fast.ai 官网",
+    "pytorch.org": "PyTorch 官网",
+    "huggingface.co": "Hugging Face",
+    "python.org": "Python 官网",
+}
+
+
+def origin_from_url(url: str) -> str:
+    u = (url or "").strip().lower()
+    if not u:
+        return ""
+    for host, name in _HOST_ORIGIN.items():
+        if host in u:
+            return name
+    m = re.search(r"https?://([^/]+)", u)
+    if not m:
+        return "公开网站"
+    host = m.group(1).removeprefix("www.")
+    parts = host.split(".")
+    if len(parts) >= 2:
+        return f"{parts[-2].upper()} 网站" if len(parts[-2]) <= 3 else f"{parts[-2]} 网站"
+    return "公开网站"
+
+
+def default_origin_for_type(mat_type: str, *, url: str = "", title: str = "") -> str:
+    """按资料类型给出具体平台/软件名，绝不返回「学习资料」。"""
+    if url:
+        named = origin_from_url(url)
+        if named:
+            return named
+    t = (mat_type or "doc").strip().lower()
+    title_l = (title or "").lower()
+    if t == "video" or any(k in title_l for k in ("视频", "教程演示", "实操演示")):
+        return "B站（bilibili）"
+    if t == "course":
+        return "中国大学MOOC / B站课程区"
+    if t == "book":
+        return "微信读书 / 纸质书"
+    if t == "repo":
+        return "GitHub"
+    if t == "tool":
+        return "对应官方 App / 官网"
+    if t == "practice":
+        return "练习表：腾讯文档 / 飞书文档"
+    # doc 及默认
+    if any(k in title_l for k in ("指南", "手册", "清单", "笔记", "参考表", "文档")):
+        return "公开图文：知乎 / 小红书 / 搜索引擎可检索文章"
+    return "公开图文网站（知乎 / 百度百科等）"
+
+
+def normalize_origin(
+    origin: str,
+    *,
+    mat_type: str = "doc",
+    url: str = "",
+    title: str = "",
+) -> str:
+    text = (origin or "").strip()
+    if text and not _BAD_ORIGIN.search(text) and "学习资料" not in text:
+        return text[:120]
+    return default_origin_for_type(mat_type, url=url, title=title)[:120]
+
+
+def default_howto_find(
+    *,
+    title: str,
+    mat_type: str = "doc",
+    url: str = "",
+    origin: str = "",
+) -> str:
+    if url:
+        return "复制链接，用手机浏览器打开"
+    name = (title or "资料名").strip()[:24]
+    t = (mat_type or "doc").strip().lower()
+    plat = origin or default_origin_for_type(t, title=name)
+    if t == "video":
+        return f"打开{plat}，搜索「{name}」，选有字幕/完播高的合集"
+    if t == "book":
+        return f"打开微信读书或购书平台，搜索书名「{name}」"
+    if t == "repo":
+        return f"打开 GitHub，搜索「{name}」"
+    if t == "practice":
+        return f"在腾讯文档/飞书新建表格，按「{name}」要点列检查项"
+    if t == "course":
+        return f"在{plat}搜索课程名「{name}」"
+    return f"打开{plat}，搜索「{name}」，对照标题选最近更新的图文"
+
 # ── 学习地图：知识块 + 框架 + 建议顺序 ─────────────────────────────────────
 LEARNING_PATHS: dict[str, dict] = {
     "ai": {
@@ -277,13 +399,24 @@ def catalog_for(goal_type: str, raw_text: str = "") -> list[dict]:
     items = CATALOG.get(gt) or CATALOG["generic"]
     out = []
     for i, r in enumerate(items):
+        note = r.get("note") or ""
+        url = r.get("url") or ""
+        origin = normalize_origin(
+            r.get("origin") or "", mat_type=r["type"], url=url, title=r["title"]
+        )
+        howto_find = (r.get("howto_find") or "").strip() or default_howto_find(
+            title=r["title"], mat_type=r["type"], url=url, origin=origin
+        )
         out.append(
             {
                 "title": r["title"],
                 "type": r["type"],
                 "type_label": TYPE_LABEL.get(r["type"], r["type"]),
-                "note": r.get("note") or "",
-                "url": r.get("url") or "",
+                "note": note,
+                "content": (r.get("content") or note or "")[:1200],
+                "url": url,
+                "origin": origin[:120],
+                "howto_find": howto_find[:240],
                 "source": "catalog",
                 "sort_order": i,
             }
@@ -302,13 +435,34 @@ def normalize_resources(raw: list | None, *, source: str = "llm") -> list[dict]:
         if not title:
             continue
         t = (r.get("type") or "doc").strip()
+        note = (r.get("note") or r.get("desc") or "").strip()
+        content = (
+            r.get("content") or r.get("body") or r.get("description") or ""
+        ).strip()
+        if not content and note:
+            content = note
+        url = (r.get("url") or "").strip()
+        origin = normalize_origin(
+            r.get("origin") or r.get("cite") or r.get("source_name") or "",
+            mat_type=t,
+            url=url,
+            title=title,
+        )
+        howto_find = (
+            r.get("howto_find") or r.get("how_to_find") or r.get("find") or ""
+        ).strip() or default_howto_find(
+            title=title, mat_type=t, url=url, origin=origin
+        )
         out.append(
             {
                 "title": title[:80],
                 "type": t,
                 "type_label": TYPE_LABEL.get(t, t),
-                "note": (r.get("note") or "")[:120],
-                "url": (r.get("url") or "").strip()[:300],
+                "note": note[:120],
+                "content": content[:1200],
+                "url": url[:300],
+                "origin": origin[:120],
+                "howto_find": howto_find[:240],
                 "source": source,
                 "sort_order": i,
             }

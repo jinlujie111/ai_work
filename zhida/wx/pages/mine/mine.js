@@ -33,30 +33,41 @@ Page({
     this._loadProfile();
   },
 
+  _applyUser(user) {
+    const dailyMinutes = Number(
+      user.daily_minutes_weekday || user.dailyMinutesWeekday || 60
+    );
+    this.setData({
+      loggedIn: true,
+      user,
+      dailyMinutes,
+      memberLabel: user.is_member
+        ? `${user.membership === 'year' ? '年' : '月'}会员`
+        : _freeQuotaLabel(user)
+    });
+  },
+
   _loadProfile() {
-    api
+    return api
       .ensureLogin()
       .then(() => api.request({ url: '/api/me' }))
       .then((user) => {
-        const dailyMinutes = Number(
-          user.daily_minutes_weekday || user.dailyMinutesWeekday || 60
-        );
-        this.setData({
-          loggedIn: true,
-          user,
-          dailyMinutes,
-          memberLabel: user.is_member
-            ? `${user.membership === 'year' ? '年' : '月'}会员`
-            : _freeQuotaLabel(user)
-        });
+        this._applyUser(user);
+        return user;
       })
-      .catch(() => {
+      .catch((err) => {
+        // token 失效：清掉后交由调用方重登
+        const msg = (err && err.message) || '';
+        if (/invalid token|user not found|401|未登录|missing bearer/i.test(msg)) {
+          api.clearSession();
+        }
         this.setData({
           loggedIn: false,
           user: {},
           memberLabel: '',
           dailyMinutes: 60
         });
+        return Promise.reject(err);
       });
   },
 
@@ -64,12 +75,20 @@ Page({
     if (this.data.loggingIn) return;
     const app = getApp();
     app.globalData.forceLoggedOut = false;
+    // 旧无效 token 会卡住 ensureLogin 直接 resolve，先清再登
+    api.clearSession();
     this.setData({ loggingIn: true });
     app
       .ensureLogin()
       .then(() => this._loadProfile())
       .then(() => wx.showToast({ title: '已登录', icon: 'success' }))
-      .catch((err) => wx.showToast({ title: err.message || '登录失败', icon: 'none' }))
+      .catch((err) => {
+        wx.showToast({
+          title: (err && err.message) || '登录失败',
+          icon: 'none',
+          duration: 2800
+        });
+      })
       .then(() => this.setData({ loggingIn: false }));
   },
 

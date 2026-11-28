@@ -14,7 +14,49 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from ..llm import LLMError, chat_json
+from ..market_service import estimate_module_days
+from ..resources_catalog import default_howto_find, normalize_origin
 from .goal_intent import REJECT_MSG, is_llm_rejected
+
+
+def parse_user_duration_days(raw: str) -> int | None:
+    """用户是否写明学习周期。返回天数；绝对日期返回 -1；未说明返回 None。"""
+    text = (raw or "").strip()
+    if not text:
+        return None
+    if re.search(r"\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}", text):
+        return -1
+    if re.search(r"\d{1,2}\s*月\s*\d{1,2}\s*[日号]", text):
+        return -1
+    m = re.search(r"(\d+)\s*天", text)
+    if m:
+        return max(1, min(int(m.group(1)), 90))
+    m = re.search(r"(\d+)\s*周", text)
+    if m:
+        return max(1, min(int(m.group(1)) * 7, 90))
+    if re.search(r"[两俩二]\s*周", text):
+        return 14
+    if "半个月" in text:
+        return 15
+    m = re.search(r"(\d+)\s*个?月", text)
+    if m:
+        return max(1, min(int(m.group(1)) * 30, 90))
+    if re.search(r"(一个月|1个月)", text):
+        return 30
+    return None
+
+
+def strip_duration_from_title(title: str) -> str:
+    """去掉标题里 LLM 擅自加的「N天/N周」，避免用户未说周期却显示 30 天。"""
+    text = (title or "").strip()
+    if not text:
+        return text
+    text = re.sub(r"\d+\s*天", "", text)
+    text = re.sub(r"\d+\s*周", "", text)
+    text = re.sub(r"\d+\s*个?月", "", text)
+    text = re.sub(r"[·\-_|/]\s*$", "", text)
+    text = re.sub(r"\s{2,}", " ", text).strip(" ·-_|/")
+    return text or (title or "").strip()
 
 
 class PlanGraphState(TypedDict, total=False):
@@ -65,12 +107,38 @@ def _normalize_materials(raw) -> list[dict]:
         title = (r.get("title") or r.get("name") or "").strip()
         if not title:
             continue
+        note = (r.get("note") or r.get("desc") or "").strip()
+        content = (
+            r.get("content") or r.get("body") or r.get("description") or ""
+        ).strip()
+        if not content and note:
+            content = note
+        mat_type = (r.get("type") or "doc")[:24]
+        url = (r.get("url") or "").strip()
+        origin = normalize_origin(
+            r.get("origin") or r.get("cite") or r.get("source_name") or r.get("from") or "",
+            mat_type=mat_type,
+            url=url,
+            title=title,
+        )
+        howto_find = (
+            r.get("howto_find")
+            or r.get("how_to_find")
+            or r.get("find")
+            or r.get("search")
+            or ""
+        ).strip() or default_howto_find(
+            title=title, mat_type=mat_type, url=url, origin=origin
+        )
         out.append(
             {
                 "title": title[:80],
-                "type": (r.get("type") or "doc")[:24],
-                "url": (r.get("url") or "")[:500],
-                "note": (r.get("note") or r.get("desc") or "")[:120],
+                "type": mat_type,
+                "url": url[:500],
+                "note": note[:120],
+                "content": content[:1200],
+                "origin": origin[:120],
+                "howto_find": howto_find[:240],
             }
         )
         if len(out) >= 4:
@@ -118,11 +186,11 @@ async def node_modules(state: PlanGraphState) -> dict:
     """一次 LLM：技能概括 + 使用场景 + 分阶段学习（含材料）。"""
     system = """你是学习技能拆解器。系统已确认输入为学习技能类。只输出 JSON：
 {
-  "title": "短标题≤16字",
+  "title": "短标题≤16字，不要写天数（除非用户原文写了）",
   "description": "一句话目标",
   "goal_type": "ai|python|english|fitness|office|generic",
   "baseline": "当前基础",
-  "total_days": 30,
+  "total_days": 14,
   "completion_criteria": "可检验标准一句",
   "skill_overview": "对该技能的概括，2~4句，说清是什么、核心能力边界",
   "skill_scenarios": ["使用场景1", "使用场景2", "使用场景3"],
@@ -139,7 +207,15 @@ async def node_modules(state: PlanGraphState) -> dict:
       "skippable": false,
       "skip_reason": "",
       "materials": [
-        {"title": "资料名", "type": "doc|course|book|video|practice|tool|repo", "url": "", "note": "怎么用"}
+        {
+          "title": "资料名（真实可检索）",
+          "type": "doc|course|book|video|practice|tool|repo",
+          "url": "有稳定公开链接就填；没有可空",
+          "note": "一句话用法",
+          "origin": "具体平台名：视频→B站/抖音/YouTube；文档→腾讯文档/飞书/语雀/知乎；网页→站点名如 Python官网；书→微信读书；禁止写「学习资料」",
+          "howto_find": "怎么找到：平台+搜索词，如「打开B站，搜索：烧烤 炭火 安全 入门」",
+          "content": "学习文档描述：学什么、关键要点、怎么练、练完如何自检（3~8句）"
+        }
       ]
     }
   ],
@@ -149,13 +225,15 @@ async def node_modules(state: PlanGraphState) -> dict:
 }
 硬性规则：
 1. 不要排日历/tasks；modules 正好 3~5 个，按学习顺序。
-2. 每阶段 skills 2~4 个；learn 必填；materials 1~3 条（可无 url，但要有 title）。
-3. skill_overview、skill_scenarios 必填；场景 2~4 条。
-4. baseline / skills_context 只用于同领域入门 skippable 或补现状，不得改写目标领域。
-5. 只做技能学习拆解；若发现是规划/旅行/办事/闲聊等非学习技能，不要编造 modules，只输出：
+2. 每阶段 skills 2~4 个；learn 必填；estimated_hours 必填且务实：入门阶段 2~6、进阶 5~12、较难 10~20，禁止每个阶段都写 8~10 凑成 30 天。
+3. 每条 material 必须给：content、origin、howto_find。origin 必须是具体软件/平台/网站名（视频→B站/抖音/YouTube；文档→腾讯文档/飞书/语雀/知乎专栏；网页→具体站名；书→微信读书等），严禁「学习资料/公开资料/推荐资料」等空话；howto_find 写清打开哪个 App/网站 + 搜索词。
+4. total_days：仅当用户原文写了「N天/N周/截止日」才按其周期；用户没写时按难度估（烧烤/简单实操常见 7~14，中等技能 14~28，硬核 30~60），禁止无依据写 30，禁止把「30天」写进 title。
+5. skill_overview、skill_scenarios 必填；场景 2~4 条。
+6. baseline / skills_context 只用于同领域入门 skippable 或补现状，不得改写目标领域。
+7. 只做技能学习拆解；若发现是规划/旅行/办事/闲聊等非学习技能，不要编造 modules，只输出：
    {"accepted": false, "reject_reason": "当前仅支持学习技能类目标，不支持规划类，请改成「我想学……」"}
-6. marketable：普遍可复用技能为 true；过私/一次性为 false；true 时必须给 market_skill_name。
-7. 合法学习目标可不写 accepted，或 accepted=true。"""
+8. marketable：普遍可复用技能为 true；过私/一次性为 false；true 时必须给 market_skill_name。
+9. 合法学习目标可不写 accepted，或 accepted=true。"""
     skills = state.get("skills_context") or []
     hints = state.get("catalog_hints") or []
     raw = state.get("raw_text") or ""
@@ -197,12 +275,12 @@ async def node_modules(state: PlanGraphState) -> dict:
         # ValueError → 前端提示；勿用 LLMError（会落入本地模板误生成）
         raise ValueError(reject or REJECT_MSG)
 
-    total_days = int(data.get("total_days") or 30)
-    m_days = re.search(r"(\d+)\s*天", raw)
-    if m_days:
-        hinted = max(1, min(int(m_days.group(1)), 90))
-        if abs(total_days - hinted) > 2:
-            total_days = hinted
+    try:
+        llm_days = int(data.get("total_days") or 0)
+    except (TypeError, ValueError):
+        llm_days = 0
+    user_days = parse_user_duration_days(raw)
+    daily_minutes = int(state.get("daily_minutes") or data.get("daily_minutes") or 60)
 
     extracted = {
         "intent": "create_goal",
@@ -210,8 +288,8 @@ async def node_modules(state: PlanGraphState) -> dict:
         "description": data.get("description") or state.get("raw_text") or "",
         "goal_type": (data.get("goal_type") or "generic").strip() or "generic",
         "baseline": data.get("baseline") or state.get("baseline") or "",
-        "daily_minutes": int(data.get("daily_minutes") or state.get("daily_minutes") or 60),
-        "total_days": total_days,
+        "daily_minutes": daily_minutes,
+        "total_days": max(1, llm_days or 21),
         "start_date": data.get("start_date") or state["today"],
         "deadline": data.get("deadline") or "",
         "completion_criteria": data.get("completion_criteria") or "",
@@ -225,11 +303,8 @@ async def node_modules(state: PlanGraphState) -> dict:
         )
     if state.get("daily_minutes"):
         extracted["daily_minutes"] = int(state["daily_minutes"])
+        daily_minutes = extracted["daily_minutes"]
     extracted.setdefault("start_date", state["today"])
-    if not extracted.get("deadline"):
-        extracted["deadline"] = _add_days(
-            extracted["start_date"], max(int(extracted.get("total_days") or 30), 1)
-        )
 
     feasibility = {
         "feasible": True,
@@ -246,6 +321,36 @@ async def node_modules(state: PlanGraphState) -> dict:
         raise LLMError("plan_modules returned empty modules")
     if not cats:
         cats = list({m["category"] for m in modules if m.get("category")}) or ["综合"]
+
+    # 周期：用户明示优先；否则一律按模块难度+课时估算（不信任 LLM 的 30 天）
+    if user_days is not None and user_days > 0:
+        extracted["total_days"] = user_days
+        extracted["deadline"] = _add_days(extracted["start_date"], user_days)
+    elif user_days == -1:
+        # 用户给了绝对日期，保留 LLM deadline；缺省时再估
+        if not extracted.get("deadline"):
+            estimated = estimate_module_days(modules, daily_minutes=daily_minutes)
+            extracted["total_days"] = estimated
+            extracted["deadline"] = _add_days(extracted["start_date"], estimated)
+        else:
+            try:
+                d0 = datetime.strptime(extracted["start_date"], "%Y-%m-%d")
+                d1 = datetime.strptime(extracted["deadline"][:10], "%Y-%m-%d")
+                extracted["total_days"] = max(1, (d1 - d0).days)
+            except ValueError:
+                pass
+    else:
+        estimated = estimate_module_days(modules, daily_minutes=daily_minutes)
+        extracted["total_days"] = estimated
+        extracted["deadline"] = _add_days(extracted["start_date"], estimated)
+    # 标题不承载周期；「烧烤入门30天」→「烧烤入门」
+    extracted["title"] = strip_duration_from_title(str(extracted.get("title") or "")) or str(
+        extracted.get("title") or "未命名目标"
+    )
+    if not extracted.get("deadline"):
+        extracted["deadline"] = _add_days(
+            extracted["start_date"], max(int(extracted.get("total_days") or 14), 1)
+        )
 
     overview = (data.get("skill_overview") or data.get("overview") or "").strip()
     scenarios = data.get("skill_scenarios") or data.get("scenarios") or []
@@ -265,7 +370,17 @@ async def node_modules(state: PlanGraphState) -> dict:
         if hint_pool:
             h = hint_pool[i % len(hint_pool)]
             m["materials"] = _normalize_materials(
-                [{"title": h.get("title"), "type": h.get("type") or "doc", "url": h.get("url") or "", "note": h.get("note") or ""}]
+                [
+                    {
+                        "title": h.get("title"),
+                        "type": h.get("type") or "doc",
+                        "url": h.get("url") or "",
+                        "note": h.get("note") or "",
+                        "content": h.get("content") or h.get("note") or "",
+                        "origin": h.get("origin") or "",
+                        "howto_find": h.get("howto_find") or "",
+                    }
+                ]
             )
 
     marketable = data.get("marketable")
@@ -440,7 +555,7 @@ def schedule_stages(
     daily_minutes: int,
     start_date: str,
     deadline: str | None = None,
-    total_days: int = 30,
+    total_days: int = 14,
     occupied: dict[str, int] | None = None,
     weekend_minutes: int | None = None,
 ) -> tuple[list[dict], str, list[str]]:
@@ -453,10 +568,10 @@ def schedule_stages(
     we = max(10, int(weekend_minutes if weekend_minutes is not None else daily))
     start = start_date
     dl = (deadline or "").strip() or None
-    # 截止日为空或与起日相同 → 按总量拉出合理窗口，避免任务全堆第一天
+    # 截止日为空或与起日相同 → 按任务量与传入 total_days 拉窗口（默认 14，不再 30）
     if not dl or dl <= start:
         n_tasks = sum(len(st.get("tasks") or []) for st in (stages or []))
-        horizon = max(total_days, max(7, n_tasks * 2), 14)
+        horizon = max(int(total_days or 14), max(5, n_tasks), 7)
         dl = _add_days(start, horizon)
     warnings: list[str] = []
     stages_out = []
@@ -677,11 +792,18 @@ async def expand_selected_modules(
         daily_minutes=daily,
     )
 
+    try:
+        d0 = datetime.strptime(start_date, "%Y-%m-%d")
+        d1 = datetime.strptime((deadline or start_date)[:10], "%Y-%m-%d")
+        span_days = max(5, (d1 - d0).days)
+    except ValueError:
+        span_days = 14
     scheduled, final_deadline, warnings = schedule_stages(
         stages=aligned,
         daily_minutes=daily,
         start_date=start_date,
         deadline=deadline,
+        total_days=span_days,
         occupied=occupied,
         weekend_minutes=weekend_minutes,
     )

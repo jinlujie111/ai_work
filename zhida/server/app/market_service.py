@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .models import SkillMarketItem
@@ -101,6 +103,13 @@ def domain_label(raw: str | None) -> str:
     return DOMAIN_LABEL.get(normalize_domain(raw), "综合")
 
 
+MARKET_STATUS_LABEL = {
+    "pending": "待上线",
+    "active": "已上线",
+    "offline": "已下线",
+}
+
+
 def serialize_market_item(item: SkillMarketItem, *, detail: bool = False) -> dict:
     modules_blob = _loads(item.modules_json, {})
     if isinstance(modules_blob, list):
@@ -116,6 +125,7 @@ def serialize_market_item(item: SkillMarketItem, *, detail: bool = False) -> dic
             _loads(item.skill_categories_json, None) or modules_blob.get("skill_categories") or []
         )
     domain = normalize_domain(item.domain)
+    status = (item.status or "active").strip().lower()
     out = {
         "id": item.id,
         "skill_name": item.skill_name,
@@ -128,8 +138,11 @@ def serialize_market_item(item: SkillMarketItem, *, detail: bool = False) -> dic
         "skill_categories": categories if isinstance(categories, list) else [],
         "module_count": len(modules) if isinstance(modules, list) else 0,
         "use_count": int(item.use_count or 0),
-        "source": item.source,
-        "status": item.status,
+        "source": item.source or "",
+        "status": status,
+        "status_label": MARKET_STATUS_LABEL.get(status, status),
+        "created_at": item.created_at.isoformat() if item.created_at else "",
+        "updated_at": item.updated_at.isoformat() if item.updated_at else "",
     }
     if detail:
         out["aliases"] = _loads(item.aliases_json, [])
@@ -218,6 +231,8 @@ def _match_score(item: SkillMarketItem, needle: str, raw_q: str) -> int:
 
 def find_market_match(db: Session, raw_text: str) -> SkillMarketItem | None:
     """生成草案前：技能市场命中则返回最佳项。"""
+    from .workflows.plan_graph import strip_duration_from_title
+
     q = (raw_text or "").strip()
     if len(q) < 2:
         return None
@@ -237,48 +252,89 @@ def find_market_match(db: Session, raw_text: str) -> SkillMarketItem | None:
     # 阈值：至少命中别名/标题弱匹配
     if best_score < 40:
         return None
+    # 顺带清洗市场里历史「xx入门30天」标题（随本次草案事务提交）
+    if best is not None:
+        cleaned_title = strip_duration_from_title(best.title or "") or best.title
+        cleaned_name = strip_duration_from_title(best.skill_name or "") or best.skill_name
+        if cleaned_title and cleaned_title != best.title:
+            best.title = cleaned_title[:128]
+        if cleaned_name and cleaned_name != best.skill_name:
+            best.skill_name = cleaned_name[:64]
     return best
 
 
+_DIFF_DAY_MULT = {"easy": 0.7, "medium": 1.0, "hard": 1.4}
+# LLM 常把课时报高；按难度封顶，缺省给合理课时
+_DIFF_DEFAULT_HOURS = {"easy": 3.5, "medium": 7.0, "hard": 12.0}
+_DIFF_HOUR_CAP = {"easy": 6.0, "medium": 12.0, "hard": 20.0}
+
+
 def estimate_module_days(modules: list | None, *, daily_minutes: int = 60) -> int:
-    """按模块/技能点与每日可用时长估算学习天数（不含起日当天）。"""
+    """按模块难度、封顶后的课时与每日可用时长估算学习天数（不含起日当天）。
+
+    以课时为主、技能点为辅，避免 LLM 一律 30 天或虚高 estimated_hours。
+    """
+    import math
+
     mods = [m for m in (modules or []) if isinstance(m, dict)]
     if not mods:
-        return 21
-    skill_n = 0
+        return 14
+    weighted_skills = 0.0
     hours = 0.0
     for m in mods:
+        diff = str(m.get("difficulty") or "medium").lower()
+        if diff not in _DIFF_DEFAULT_HOURS:
+            diff = "medium"
+        mult = _DIFF_DAY_MULT.get(diff, 1.0)
         skills = m.get("skills") or []
-        skill_n += max(1, len(skills) if isinstance(skills, list) else 1)
+        n = max(1, len(skills) if isinstance(skills, list) else 1)
+        weighted_skills += n * mult
         try:
-            hours += float(m.get("estimated_hours") or 0)
+            raw_h = float(m.get("estimated_hours") or 0)
         except (TypeError, ValueError):
-            pass
-    daily = max(10, int(daily_minutes or 60))
-    # 每技能点约 1.5 个学习日；或按小时 / 每日时长
-    by_skills = max(len(mods) * 4, int(skill_n * 1.5) + len(mods))
-    by_hours = int((hours * 60) / daily) + len(mods) if hours > 0 else 0
-    return max(7, min(90, max(by_skills, by_hours, 14)))
+            raw_h = 0.0
+        if raw_h <= 0:
+            raw_h = _DIFF_DEFAULT_HOURS[diff]
+        else:
+            raw_h = min(raw_h, _DIFF_HOUR_CAP[diff])
+        hours += raw_h
+    daily = max(15, int(daily_minutes or 60))
+    by_hours = max(1, int(math.ceil((hours * 60.0) / daily)))
+    # 技能点辅助：入门偏少、较难偏多，但不压过课时估算太多
+    by_skills = max(len(mods) * 2, int(math.ceil(weighted_skills * 1.15)))
+    days = max(by_hours, by_skills)
+    # 纯入门短链路可到 5 天；上限 75，杜绝默认 30/90
+    return max(5, min(75, days))
 
 
 def market_item_to_plan_data(item: SkillMarketItem, *, raw_text: str, baseline: str, daily_minutes: int) -> dict:
     """把市场技能包转成与 LLM 草案同构的 data。"""
     from .workflows.fallback import add_days, today_str
+    from .workflows.plan_graph import parse_user_duration_days, strip_duration_from_title
 
     detail = serialize_market_item(item, detail=True)
     modules = detail.get("modules") or []
     start = today_str()
-    days = estimate_module_days(modules, daily_minutes=daily_minutes)
+    user_days = parse_user_duration_days(raw_text)
+    if user_days is not None and user_days > 0:
+        days = user_days
+    else:
+        days = estimate_module_days(modules, daily_minutes=daily_minutes)
+    # 市场旧包常带「xx入门30天」；用户没写天数时标题去掉天数
+    raw_title = (item.title or item.skill_name or "学习目标").strip()
+    title = (
+        strip_duration_from_title(raw_title) if not (user_days and user_days > 0) else raw_title
+    ) or raw_title
     return {
         "goal": {
-            "title": item.title[:16],
-            "description": item.skill_overview or raw_text,
+            "title": title[:16],
+            "description": raw_text or item.skill_overview or "",
             "goal_type": normalize_domain(item.domain),
             "baseline": baseline or "未说明",
             "daily_minutes": daily_minutes,
             "start_date": start,
             "deadline": add_days(start, days),
-            "completion_criteria": f"完成「{item.skill_name}」各阶段可检验练习",
+            "completion_criteria": f"完成「{strip_duration_from_title(item.skill_name or title) or title}」各阶段可检验练习",
         },
         "skill_overview": detail.get("skill_overview") or "",
         "skill_scenarios": detail.get("skill_scenarios") or [],
@@ -332,12 +388,16 @@ def upsert_market_from_plan(
 ) -> SkillMarketItem | None:
     if not should_publish_to_market(raw_text, data):
         return None
+    from .workflows.plan_graph import strip_duration_from_title
+
     skill_name = (
         (data.get("market_skill_name") or "").strip()
         or ((data.get("goal") or {}).get("title") or "").strip()
         or "未命名技能"
-    )[:64]
-    title = ((data.get("goal") or {}).get("title") or skill_name)[:128]
+    )
+    skill_name = (strip_duration_from_title(skill_name) or skill_name)[:64]
+    title = ((data.get("goal") or {}).get("title") or skill_name).strip()
+    title = (strip_duration_from_title(title) or title)[:128]
     domain = normalize_domain(
         infer_goal_type(raw_text, ((data.get("goal") or {}).get("goal_type") or "generic"))
     )
@@ -365,7 +425,13 @@ def upsert_market_from_plan(
             break
 
     if existing:
-        # 已有市场包：只补空字段，不覆盖已验证内容
+        # 已有市场包：只补空字段，不覆盖已验证内容；顺带清掉标题里的假「N天」
+        cleaned_title = strip_duration_from_title(existing.title or "") or existing.title
+        cleaned_name = strip_duration_from_title(existing.skill_name or "") or existing.skill_name
+        if cleaned_title and cleaned_title != existing.title:
+            existing.title = cleaned_title[:128]
+        if cleaned_name and cleaned_name != existing.skill_name:
+            existing.skill_name = cleaned_name[:64]
         if not existing.skill_overview and data.get("skill_overview"):
             existing.skill_overview = data.get("skill_overview") or ""
         if not _loads(existing.modules_json, {}).get("modules") and modules:
@@ -389,11 +455,72 @@ def upsert_market_from_plan(
         scope="universal",
         source="llm",
         use_count=0,
-        status="active",
+        # LLM 新技能默认待上线，需运营在 Ops 后台审核后上线
+        status="pending",
     )
     db.add(item)
     db.flush()
     return item
+
+
+def list_market_items_admin(
+    db: Session,
+    *,
+    status: str | None = None,
+    q: str = "",
+    domain: str | None = None,
+    limit: int = 100,
+) -> list[SkillMarketItem]:
+    """运营后台：可按状态筛选，含 pending / offline。"""
+    query = db.query(SkillMarketItem)
+    st = (status or "").strip().lower()
+    if st in ("pending", "active", "offline"):
+        query = query.filter(SkillMarketItem.status == st)
+    items = query.order_by(SkillMarketItem.updated_at.desc(), SkillMarketItem.id.desc()).all()
+    want = normalize_domain(domain) if domain and domain not in ("", "all") else ""
+    if want:
+        items = [it for it in items if normalize_domain(it.domain) == want]
+    needle = _norm(q)
+    if needle:
+        scored = []
+        for it in items:
+            score = _match_score(it, needle, q)
+            if score > 0 or needle in _norm(it.skill_name) or needle in _norm(it.title):
+                scored.append((score, it))
+        scored.sort(key=lambda x: (-x[0], -int(x[1].use_count or 0)))
+        items = [it for _, it in scored]
+    return items[: max(1, min(limit, 200))]
+
+
+def set_market_item_status(
+    db: Session, item_id: int, status: str
+) -> SkillMarketItem:
+    st = (status or "").strip().lower()
+    if st not in ("pending", "active", "offline"):
+        raise ValueError("status 仅支持 pending / active / offline")
+    item = db.get(SkillMarketItem, item_id)
+    if not item:
+        raise ValueError("技能不存在")
+    item.status = st
+    item.updated_at = utc_now()
+    db.flush()
+    return item
+
+
+def market_status_counts(db: Session) -> dict[str, int]:
+    rows = (
+        db.query(SkillMarketItem.status, func.count(SkillMarketItem.id))
+        .group_by(SkillMarketItem.status)
+        .all()
+    )
+    out = {"pending": 0, "active": 0, "offline": 0, "total": 0}
+    for st, n in rows:
+        key = (st or "").strip().lower() or "active"
+        if key not in out:
+            out[key] = 0
+        out[key] = int(n or 0)
+        out["total"] += int(n or 0)
+    return out
 
 
 def bump_use_count(db: Session, item: SkillMarketItem) -> None:

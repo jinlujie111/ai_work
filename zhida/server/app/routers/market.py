@@ -61,6 +61,20 @@ def market_use(
     if not item or item.status != "active":
         raise HTTPException(status_code=404, detail="not found")
 
+    from ..workflows.goal_dedupe import find_existing_user_goal, reused_goal_payload
+
+    # 已有同技能目标 → 跳转已有，不重复创建
+    existing = find_existing_user_goal(
+        db,
+        user.id,
+        raw_text=item.title,
+        title=item.title,
+        skill_name=item.skill_name,
+        market_id=item.id,
+    )
+    if existing:
+        return reused_goal_payload(db, existing, market_id=item.id)
+
     quota = goal_quota_info(db, user)
     if not quota["is_member"] and quota["remaining"] <= 0:
         raise HTTPException(
@@ -111,6 +125,7 @@ def market_use(
         learning_path_json=item.learning_path_json or "{}",
         modules_json=json.dumps(modules_blob, ensure_ascii=False),
         plan_source="market",
+        market_item_id=item.id,
     )
     db.add(goal)
     db.flush()

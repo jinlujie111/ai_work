@@ -19,12 +19,18 @@
 
   <view class="zd-sec" wx:if="{{resources.length}}">
     <view class="zd-sec__head">资料</view>
-    <view class="res" wx:for="{{resources}}" wx:key="title">
+    <view
+      class="res"
+      wx:for="{{resources}}"
+      wx:key="title"
+      data-index="{{index}}"
+      bind:tap="onOpenResource"
+    >
       <view class="res__main">
         <view class="res__title">{{item.title}}</view>
-        <view class="zd-muted">{{item.type_label || item.type}}{{item.note ? ' · ' + item.note : ''}}</view>
+        <view class="zd-muted">{{item.type_label || item.type}}{{item.origin ? ' · 出处 ' + item.origin : (item.note ? ' · ' + item.note : '')}}</view>
       </view>
-      <text class="link" wx:if="{{item.url}}" data-url="{{item.url}}" catch:tap="onCopyUrl">复制</text>
+      <text class="link">查看</text>
     </view>
   </view>
 
@@ -125,5 +131,44 @@
       style="margin-top:16rpx"
       bind:tap="onTerminate"
     >终止学习目标</button>
+  </view>
+
+  <view class="rd-mask" wx:if="{{resDetail}}" bind:tap="onCloseResource" catchtouchmove="noop">
+    <view class="rd" catch:tap="noop">
+      <view class="rd__grip"></view>
+      <view class="rd__bar">
+        <text class="rd__type">{{resDetail.typeLabel}}</text>
+        <text class="rd__x" bind:tap="onCloseResource">关闭</text>
+      </view>
+      <view class="rd__title">{{resDetail.title}}</view>
+      <view class="rd__stage" wx:if="{{resDetail.stageName}}">所属阶段 · {{resDetail.stageName}}</view>
+      <view class="rd__sec">
+        <view class="rd__lab">出处</view>
+        <view class="rd__body">{{resDetail.origin}}</view>
+      </view>
+      <view class="rd__sec">
+        <view class="rd__lab">怎么找到</view>
+        <view class="rd__body">{{resDetail.howtoFind}}</view>
+      </view>
+      <view class="rd__sec">
+        <view class="rd__lab">学习说明</view>
+        <view class="rd__body">{{resDetail.content}}</view>
+      </view>
+      <view class="rd__ops">
+        <view class="rd__btn rd__btn--ghost" bind:tap="onCloseResource">关闭</view>
+        <view
+          class="rd__btn"
+          wx:if="{{resDetail.url}}"
+          data-url="{{resDetail.url}}"
+          bind:tap="onCopyUrl"
+        >复制链接</view>
+        <view
+          class="rd__btn"
+          wx:else
+          data-text="{{resDetail.howtoFind}}"
+          bind:tap="onCopyHowto"
+        >复制查找方式</view>
+      </view>
+    </view>
   </view>
 </view>

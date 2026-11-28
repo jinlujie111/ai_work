@@ -123,20 +123,23 @@
           <view class="ts__sec">
             <view class="ts__sec-lab"><view class="ts__sec-dot"></view>学习材料</view>
             <block wx:if="{{detail.resources.length}}">
-              <view class="ts__mat" wx:for="{{detail.resources}}" wx:key="title">
+              <view
+                class="ts__mat"
+                wx:for="{{detail.resources}}"
+                wx:key="title"
+                data-index="{{index}}"
+                bind:tap="onOpenResource"
+              >
                 <view class="ts__mat-ico">材</view>
                 <view class="ts__mat-body">
                   <text class="ts__mat-title">{{item.title}}</text>
-                  <text class="ts__mat-note" wx:if="{{item.note}}">{{item.note}}</text>
+                  <text class="ts__mat-note" wx:if="{{item.origin}}">出处 · {{item.origin}}</text>
+                  <text class="ts__mat-note" wx:elif="{{item.note}}">{{item.note}}</text>
                 </view>
-                <view
-                  class="ts__mat-btn {{item.url ? '' : 'ts__mat-btn--ghost'}}"
-                  data-url="{{item.url}}"
-                  catch:tap="onCopyResource"
-                >{{item.url ? '复制' : '无链接'}}</view>
+                <view class="ts__mat-btn">查看</view>
               </view>
             </block>
-            <view class="ts__empty" wx:else>暂无链接材料</view>
+            <view class="ts__empty" wx:else>暂无学习材料</view>
           </view>
         </block>
       </scroll-view>
@@ -147,6 +150,44 @@
           data-id="{{detail.id}}"
           bind:tap="onToggleFromDetail"
         >{{detail.status === 'done' ? '已完成' : '标记完成'}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="rd-mask" wx:if="{{matDetail}}" bind:tap="onCloseMat" catchtouchmove="noop">
+    <view class="rd" catch:tap="noop">
+      <view class="rd__grip"></view>
+      <view class="rd__bar">
+        <text class="rd__type">{{matDetail.typeLabel}}</text>
+        <text class="rd__x" bind:tap="onCloseMat">关闭</text>
+      </view>
+      <view class="rd__title">{{matDetail.title}}</view>
+      <view class="rd__sec">
+        <view class="rd__lab">出处</view>
+        <view class="rd__body">{{matDetail.origin}}</view>
+      </view>
+      <view class="rd__sec">
+        <view class="rd__lab">怎么找到</view>
+        <view class="rd__body">{{matDetail.howtoFind}}</view>
+      </view>
+      <view class="rd__sec">
+        <view class="rd__lab">学习说明</view>
+        <view class="rd__body">{{matDetail.content}}</view>
+      </view>
+      <view class="rd__ops">
+        <view class="rd__btn rd__btn--ghost" bind:tap="onCloseMat">关闭</view>
+        <view
+          class="rd__btn"
+          wx:if="{{matDetail.url}}"
+          data-url="{{matDetail.url}}"
+          bind:tap="onCopyResource"
+        >复制链接</view>
+        <view
+          class="rd__btn"
+          wx:else
+          data-text="{{matDetail.howtoFind}}"
+          bind:tap="onCopyHowto"
+        >复制查找方式</view>
       </view>
     </view>
   </view>

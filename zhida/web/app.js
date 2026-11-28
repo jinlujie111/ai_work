@@ -1,7 +1,7 @@
 (() => {
   const TOKEN_KEY = "zhida_ops_session";
   const USER_KEY = "zhida_ops_user";
-  const state = { days: 30, data: null };
+  const state = { days: 30, data: null, marketStatus: "", marketQ: "" };
 
   const $ = (id) => document.getElementById(id);
   const toastEl = $("toast");
@@ -621,10 +621,129 @@
       .join(" ");
   }
 
+  function sourceLabel(s) {
+    const map = { llm: "LLM", seed: "种子", admin: "人工", market: "市场" };
+    return map[s] || s || "—";
+  }
+
+  function renderMarket(payload) {
+    const counts = payload.counts || {};
+    $("marketCounts").innerHTML = [
+      `全部 <strong>${num(counts.total)}</strong>`,
+      `待上线 <strong>${num(counts.pending)}</strong>`,
+      `已上线 <strong>${num(counts.active)}</strong>`,
+      `已下线 <strong>${num(counts.offline)}</strong>`,
+    ].join("<span>·</span>");
+    $("marketMeta").textContent = `LLM 新技能默认待上线 · 当前筛选 ${
+      state.marketStatus || "全部"
+    } · ${num((payload.items || []).length)} 条`;
+
+    const body = $("marketBody");
+    const items = payload.items || [];
+    if (!items.length) {
+      body.innerHTML =
+        '<tr><td colspan="8" style="color:var(--ink-3)">暂无技能，或当前筛选无结果</td></tr>';
+      return;
+    }
+    body.innerHTML = items
+      .map((it) => {
+        const st = it.status || "active";
+        const updated = (it.updated_at || "").replace("T", " ").slice(0, 16);
+        const onlineDisabled = st === "active" ? "disabled" : "";
+        const offlineDisabled = st === "offline" ? "disabled" : "";
+        return `<tr data-id="${it.id}">
+          <td>
+            <div class="mk-title">${escapeHtml(it.title || it.skill_name || "—")}</div>
+            <div class="mk-sub">${escapeHtml(it.skill_name || "")}</div>
+          </td>
+          <td>${escapeHtml(it.domain_label || it.domain || "—")}</td>
+          <td>${escapeHtml(sourceLabel(it.source))}</td>
+          <td class="num">${num(it.module_count)}</td>
+          <td class="num">${num(it.use_count)}</td>
+          <td><span class="mk-status is-${st}">${escapeHtml(
+          it.status_label || st
+        )}</span></td>
+          <td>${escapeHtml(updated || "—")}</td>
+          <td>
+            <div class="mk-ops">
+              <button type="button" class="mk-btn is-primary" data-act="online" data-id="${
+                it.id
+              }" ${onlineDisabled}>上线</button>
+              <button type="button" class="mk-btn" data-act="offline" data-id="${
+                it.id
+              }" ${offlineDisabled}>下线</button>
+            </div>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  async function fetchMarket() {
+    const t = sessionToken();
+    if (!t) return null;
+    const qs = new URLSearchParams();
+    if (state.marketStatus) qs.set("status", state.marketStatus);
+    if (state.marketQ) qs.set("q", state.marketQ);
+    qs.set("limit", "100");
+    const res = await fetch(`${apiBase()}/api/admin/ops/market/skills?${qs}`, {
+      headers: { ...authHeaders() },
+    });
+    if (res.status === 401) {
+      showLogin("登录已过期，请重新登录");
+      return null;
+    }
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(detail || `HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async function loadMarket() {
+    try {
+      const d = await fetchMarket();
+      if (d) renderMarket(d);
+    } catch (err) {
+      console.error(err);
+      toast(`技能市场加载失败：${err.message || err}`);
+    }
+  }
+
+  async function setMarketStatus(id, action) {
+    const res = await fetch(`${apiBase()}/api/admin/ops/market/skills/${id}/${action}`, {
+      method: "POST",
+      headers: { ...authHeaders() },
+    });
+    if (res.status === 401) {
+      showLogin("登录已过期，请重新登录");
+      return;
+    }
+    if (!res.ok) {
+      let msg = `操作失败 HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body.detail) msg = typeof body.detail === "string" ? body.detail : msg;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+    toast(action === "online" ? "已上线" : "已下线");
+    await loadMarket();
+  }
+
   async function load() {
     try {
       const d = await fetchSummary();
       if (d) renderAll(d);
+      await loadMarket();
     } catch (err) {
       console.error(err);
       toast(`加载失败：${err.message || err}`);
@@ -667,7 +786,43 @@
       btn.classList.add("is-active");
       const target = document.getElementById(btn.dataset.jump);
       if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (btn.dataset.jump === "market") loadMarket();
     });
+  });
+
+  document.querySelectorAll("#marketStatusSeg [data-mstatus]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document
+        .querySelectorAll("#marketStatusSeg [data-mstatus]")
+        .forEach((b) => b.classList.remove("is-on"));
+      btn.classList.add("is-on");
+      state.marketStatus = btn.dataset.mstatus || "";
+      loadMarket();
+    });
+  });
+
+  let marketQTimer = null;
+  $("marketQ").addEventListener("input", () => {
+    clearTimeout(marketQTimer);
+    marketQTimer = setTimeout(() => {
+      state.marketQ = $("marketQ").value.trim();
+      loadMarket();
+    }, 280);
+  });
+  $("marketRefreshBtn").addEventListener("click", loadMarket);
+
+  $("marketBody").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act][data-id]");
+    if (!btn || btn.disabled) return;
+    const id = btn.dataset.id;
+    const act = btn.dataset.act;
+    btn.disabled = true;
+    try {
+      await setMarketStatus(id, act);
+    } catch (err) {
+      toast(err.message || "操作失败");
+      btn.disabled = false;
+    }
   });
 
   window.addEventListener("resize", () => {

@@ -16,6 +16,7 @@ from ..resources_catalog import (
 )
 from ..market_service import (
     bump_use_count,
+    estimate_module_days,
     find_market_match,
     market_item_to_plan_data,
     upsert_market_from_plan,
@@ -90,10 +91,34 @@ async def generate_plan_draft(
             "终止或放弃不释放名额；开通会员不限数量。"
         )
 
+    from .goal_dedupe import find_existing_user_goal, reused_goal_payload
+
     source = "local"
     await _emit(on_event, {"event": "progress", "step": "market", "message": "匹配技能市场…"})
     market_item = find_market_match(db, raw_text)
     published_market_id = None
+
+    # 已有同技能目标 → 直接复用，不再新建
+    existing = find_existing_user_goal(
+        db,
+        user.id,
+        raw_text=raw_text,
+        title="",
+        skill_name=(market_item.skill_name if market_item else ""),
+        market_id=market_item.id if market_item else None,
+    )
+    if existing:
+        await _emit(
+            on_event,
+            {
+                "event": "progress",
+                "step": "done",
+                "message": "已有同技能目标，正在打开…",
+            },
+        )
+        return reused_goal_payload(
+            db, existing, market_id=market_item.id if market_item else None
+        )
 
     if market_item:
         await _emit(
@@ -199,6 +224,9 @@ async def generate_plan_draft(
                     "type": h.get("type") or "doc",
                     "url": h.get("url") or "",
                     "note": h.get("note") or "",
+                    "content": h.get("content") or h.get("note") or "",
+                    "origin": h.get("origin") or "",
+                    "howto_find": h.get("howto_find") or "",
                 }
             ]
     skill_categories = [
@@ -240,6 +268,12 @@ async def generate_plan_draft(
             data.setdefault("analysis", {})
             data["analysis"]["published_market_id"] = published_market_id
             data["analysis"]["published_market_name"] = published.skill_name
+            data["analysis"]["published_market_status"] = published.status or "pending"
+            # 新入库为 pending：小程序市场不可见，待 Ops 上线
+            if (published.status or "") == "pending":
+                data["analysis"]["publish_note"] = (
+                    "已写入技能市场（待上线），需管理员在 Ops 后台审核上线后才会出现在市场"
+                )
         else:
             data.setdefault("analysis", {})
             data["analysis"]["publish_skipped"] = True
@@ -252,20 +286,49 @@ async def generate_plan_draft(
         data["analysis"]["publish_skip_reason"] = "本地兜底未走大模型，不写入市场"
 
     await _emit(on_event, {"event": "progress", "step": "save", "message": "保存学习草案…"})
+    from .fallback import add_days
+    from .plan_graph import parse_user_duration_days, strip_duration_from_title
+
     start = g.get("start_date") or today_str()
     deadline = (g.get("deadline") or "").strip()
-    # 市场命中等路径若未给截止日 / 误写成当天，按模块量 + 每日时长估算
-    if not deadline or deadline <= start:
-        from ..market_service import estimate_module_days
-        from .fallback import add_days
+    daily = int(g.get("daily_minutes") or minutes)
+    user_days = parse_user_duration_days(raw_text)
+    title = (g.get("title") or "未命名目标").strip()
+    # 标题里的「N天」一律清掉（周期只体现在起止日期）；用户明示天数只影响 deadline
+    title = strip_duration_from_title(title) or title
+    if user_days is not None and user_days > 0:
+        deadline = add_days(start, user_days)
+    elif user_days == -1:
+        if not deadline or deadline <= start:
+            deadline = add_days(start, estimate_module_days(modules, daily_minutes=daily))
+    else:
+        # 用户未写明周期 → 强制按模块难度+课时重估（含市场命中旧包）
+        deadline = add_days(start, estimate_module_days(modules, daily_minutes=daily))
 
-        deadline = add_days(
-            start,
-            estimate_module_days(modules, daily_minutes=int(g.get("daily_minutes") or minutes)),
+    market_ref = (
+        int(market_item.id)
+        if market_item
+        else int(published_market_id or 0)
+    )
+    # LLM 生成标题后再次去重（覆盖「烧烤」vs「烧烤入门」等）
+    existing2 = find_existing_user_goal(
+        db,
+        user.id,
+        raw_text=raw_text,
+        title=title,
+        skill_name=(market_item.skill_name if market_item else title),
+        market_id=market_ref or None,
+    )
+    if existing2:
+        await _emit(
+            on_event,
+            {"event": "progress", "step": "done", "message": "已有同技能目标，正在打开…"},
         )
+        return reused_goal_payload(db, existing2, market_id=market_ref or None)
+
     goal = Goal(
         user_id=user.id,
-        title=g.get("title") or "未命名目标",
+        title=title,
         description=g.get("description") or raw_text,
         goal_type=goal_type,
         baseline=g.get("baseline") or baseline or "未说明",
@@ -278,6 +341,7 @@ async def generate_plan_draft(
         learning_path_json=json.dumps(learning_path, ensure_ascii=False),
         modules_json=json.dumps(modules_blob, ensure_ascii=False),
         plan_source=source,
+        market_item_id=market_ref,
     )
     db.add(goal)
     db.flush()
@@ -291,7 +355,7 @@ async def generate_plan_draft(
         "recommended_resources": goal_resources,
         "learning_path": learning_path,
         "source": source,
-        "market_id": getattr(market_item, "id", None) if market_item else published_market_id,
+        "market_id": market_ref or None,
     }
     db.add(
         PlanVersion(

@@ -48,6 +48,7 @@ def init_db() -> None:
         "ALTER TABLE zd_goal_stages ADD COLUMN skip_reason VARCHAR(255) DEFAULT ''",
         "ALTER TABLE zd_ai_usage ADD COLUMN tokens_accurate INT DEFAULT 0",
         "ALTER TABLE zd_goals ADD COLUMN plan_source VARCHAR(32) DEFAULT ''",
+        "ALTER TABLE zd_goals ADD COLUMN market_item_id INT DEFAULT 0",
         # 历史开发态会员开通：从 paid 挪到 dev_paid，避免运营收入掺假
         "UPDATE zd_membership_orders SET status='dev_paid' WHERE status='paid' AND (note LIKE 'dev%' OR note='dev_activate')",
     ]

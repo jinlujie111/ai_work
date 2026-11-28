@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from ..models import Goal, GoalStage, Task
+from ..resources_catalog import TYPE_LABEL, default_howto_find, normalize_origin
 
 
 def _parse_resources(raw: str | None) -> list[dict]:
@@ -40,8 +41,74 @@ def _parse_modules_blob(raw: str | None) -> dict:
         return {"skill_categories": [], "modules": []}
 
 
+def _enrich_resources_with_content(resources: list, modules: list) -> list:
+    """为资料补齐学习文档描述：优先自身 content，其次模块材料，再拼 note + 阶段要点。"""
+    by_title: dict[str, dict] = {}
+    for m in modules or []:
+        if not isinstance(m, dict):
+            continue
+        stage_learn = (m.get("learn") or "").strip()
+        stage_name = (m.get("name") or "").strip()
+        for mat in m.get("materials") or m.get("resources") or []:
+            if not isinstance(mat, dict):
+                continue
+            key = (mat.get("title") or "").strip().lower()
+            if not key:
+                continue
+            by_title[key] = {
+                **mat,
+                "stage_learn": stage_learn,
+                "stage_name": stage_name,
+            }
+    out = []
+    for r in resources or []:
+        if not isinstance(r, dict):
+            continue
+        item = dict(r)
+        key = (item.get("title") or "").strip().lower()
+        hit = by_title.get(key) or {}
+        content = (item.get("content") or hit.get("content") or "").strip()
+        note = (item.get("note") or hit.get("note") or "").strip()
+        origin = (item.get("origin") or hit.get("origin") or "").strip()
+        howto_find = (item.get("howto_find") or hit.get("howto_find") or "").strip()
+        url = (item.get("url") or hit.get("url") or "").strip()
+        stage_learn = (hit.get("stage_learn") or "").strip()
+        if not content:
+            parts = []
+            if note:
+                parts.append(note)
+            if stage_learn:
+                parts.append(f"所属阶段要点：{stage_learn}")
+            content = "\n\n".join(parts)
+        t = (item.get("type") or hit.get("type") or "doc").strip()
+        title = (item.get("title") or hit.get("title") or "").strip()
+        origin = normalize_origin(origin, mat_type=t, url=url, title=title)
+        if not howto_find:
+            howto_find = default_howto_find(
+                title=title, mat_type=t, url=url, origin=origin
+            )
+        if not item.get("note") and note:
+            item["note"] = note
+        item["content"] = content
+        item["origin"] = origin
+        item["howto_find"] = howto_find
+        if url and not item.get("url"):
+            item["url"] = url
+        item["type"] = t
+        if not item.get("type_label"):
+            item["type_label"] = TYPE_LABEL.get(t, t)
+        if hit.get("stage_name"):
+            item["stage_name"] = hit.get("stage_name")
+        out.append(item)
+    return out
+
+
 def serialize_goal(goal: Goal) -> dict:
     blob = _parse_modules_blob(getattr(goal, "modules_json", None))
+    modules = blob.get("modules") or []
+    resources = _enrich_resources_with_content(
+        _parse_resources(goal.resources_json), modules
+    )
     return {
         "id": goal.id,
         "title": goal.title,
@@ -54,12 +121,14 @@ def serialize_goal(goal: Goal) -> dict:
         "status": goal.status,
         "priority_rank": int(getattr(goal, "priority_rank", None) or 100),
         "completion_criteria": goal.completion_criteria,
-        "resources": _parse_resources(goal.resources_json),
+        "resources": resources,
         "learning_path": _parse_learning_path(goal.learning_path_json),
         "skill_categories": blob.get("skill_categories") or [],
         "skill_overview": blob.get("skill_overview") or "",
         "skill_scenarios": blob.get("skill_scenarios") or [],
-        "modules": blob.get("modules") or [],
+        "modules": modules,
+        "plan_source": getattr(goal, "plan_source", None) or "",
+        "market_item_id": int(getattr(goal, "market_item_id", None) or 0),
     }
 
 
@@ -136,10 +205,42 @@ def enrich_task_learning(
     resources = out.get("resources") or _parse_resources(task.resources_json)
     if not resources:
         resources = mod.get("materials") or mod.get("resources") or []
+    if isinstance(resources, list):
+        enriched = []
+        for r in resources:
+            if not isinstance(r, dict):
+                continue
+            item = dict(r)
+            content = (item.get("content") or "").strip()
+            note = (item.get("note") or "").strip()
+            origin = (item.get("origin") or "").strip()
+            howto_find = (item.get("howto_find") or "").strip()
+            url = (item.get("url") or "").strip()
+            title = (item.get("title") or "").strip()
+            mat_type = (item.get("type") or "doc").strip()
+            if not content:
+                parts = []
+                if note:
+                    parts.append(note)
+                if learn:
+                    parts.append(f"任务要点：{learn}")
+                content = "\n\n".join(parts)
+            origin = normalize_origin(origin, mat_type=mat_type, url=url, title=title)
+            if not howto_find:
+                howto_find = default_howto_find(
+                    title=title, mat_type=mat_type, url=url, origin=origin
+                )
+            item["content"] = content
+            item["origin"] = origin
+            item["howto_find"] = howto_find
+            enriched.append(item)
+        resources = enriched
+    else:
+        resources = []
     out["stage_id"] = task.stage_id
     out["stage_name"] = stage.name if stage else (mod.get("name") or "")
     out["stage_no"] = stage_no
     out["stage_total"] = len(stages) or len(modules)
     out["learn_content"] = learn
-    out["resources"] = resources if isinstance(resources, list) else []
+    out["resources"] = resources
     return out

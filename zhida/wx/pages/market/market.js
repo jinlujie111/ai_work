@@ -1,5 +1,6 @@
 const api = require('../../services/api');
 const quota = require('../../utils/quota');
+const goalNav = require('../../utils/goalNav');
 
 Page({
   data: {
@@ -91,12 +92,7 @@ Page({
       .then((draft) => {
         wx.hideLoading();
         this.setData({ usingId: 0 });
-        const gid = draft && draft.goal && draft.goal.id;
-        if (!gid) {
-          wx.showToast({ title: '草案无效', icon: 'none' });
-          return;
-        }
-        wx.navigateTo({ url: `/pages/plan-confirm/plan-confirm?id=${gid}` });
+        goalNav.openDraftOrGoal(draft, { redirect: false });
       })
       .catch((err) => {
         wx.hideLoading();

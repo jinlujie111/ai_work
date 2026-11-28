@@ -19,9 +19,10 @@ module.exports = {
   wxAppId: 'wx335532634164aa43',
 
   // 登录：优先 wx.login → /api/auth/wx-login
-  // 已配置 WX_SECRET 后建议 false，避免静默掉进开发账号
+  // 开发者工具 / 体验版：wx 失败时允许回退 /api/auth/dev-login（app.js 按 envVersion 自动开）
+  // 正式版发布前可改 false，避免静默掉进开发账号
   preferWxLogin: true,
-  allowDevLoginFallback: false,
+  allowDevLoginFallback: true,
 
   // 本地存储前缀
   storagePrefix: 'zhida_',

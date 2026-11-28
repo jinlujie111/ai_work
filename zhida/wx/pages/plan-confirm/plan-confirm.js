@@ -32,8 +32,22 @@ Page({
   },
 
   onLoad(query) {
+    this._skipShowRefresh = true;
     this.setData({ goalId: query.id });
     this.refresh(query.id);
+  },
+
+  onShow() {
+    // 首次 onLoad 已 refresh；之后从别的页返回时恢复预览缓存
+    if (this._skipShowRefresh) {
+      this._skipShowRefresh = false;
+      return;
+    }
+    if (!this.data.goalId) return;
+    if (this.data.confirming || this.data.previewing) return;
+    if (!this.data.previewReady) {
+      this.refresh(this.data.goalId);
+    }
   },
 
   noop() {},
@@ -84,13 +98,18 @@ Page({
       .then(() => api.request({ url: `/api/goals/${goalId}` }))
       .then((data) => {
         const rawModules = data.modules || (data.goal && data.goal.modules) || [];
-        // 默认只勾前 2 个不可跳过模块，降低首周负担
+        const cached = data.expand_preview || null;
+        const cachedKeys = (cached && cached.selected_module_keys) || [];
+        const useCacheSelect = cachedKeys.length > 0;
+        // 默认只勾前 2 个不可跳过模块；若已有预览缓存则恢复当时勾选
         let keepBudget = 2;
         const modules = rawModules.map((m, idx) => {
           const skippable = !!m.skippable;
           const skills = m.skills || [];
           let selected = false;
-          if (!skippable && keepBudget > 0) {
+          if (useCacheSelect) {
+            selected = cachedKeys.indexOf(m.key) >= 0;
+          } else if (!skippable && keepBudget > 0) {
             selected = true;
             keepBudget -= 1;
           }
@@ -110,11 +129,13 @@ Page({
         const priorityList = needPriority
           ? this._buildPriorityList(goalId, data.goal.title, data.active_goals || [])
           : [];
+        const deadline =
+          (cached && cached.deadline) || data.goal.deadline;
         this.setData({
           goal: {
             title: data.goal.title,
             startDate: data.goal.start_date,
-            deadline: data.goal.deadline,
+            deadline,
             dailyMinutes: data.goal.daily_minutes,
             baseline: data.goal.baseline
           },
@@ -130,6 +151,16 @@ Page({
           priorityList
         });
         this._syncCount(modules);
+
+        const upcoming = (cached && cached.upcoming_preview) || [];
+        if (upcoming.length) {
+          const previewTasks = upcoming.map((t) => ({
+            ...t,
+            selected: t.selected !== false
+          }));
+          this._syncPreviewKept(previewTasks);
+          this.setData({ previewReady: true });
+        }
       })
       .catch((err) => wx.showToast({ title: err.message || '加载失败', icon: 'none' }));
   },
@@ -233,13 +264,17 @@ Page({
           selected: t.selected !== false
         }));
         this._syncPreviewKept(previewTasks);
-        this.setData({
+        const patch = {
           previewing: false,
           confirming: false,
           previewReady: true,
           streamPct: 100,
           streamMessage: '预览已就绪'
-        });
+        };
+        if (r.deadline) {
+          patch.goal = { ...this.data.goal, deadline: r.deadline };
+        }
+        this.setData(patch);
         if (!previewTasks.length) {
           wx.showToast({ title: '未生成可预览任务', icon: 'none' });
         }
