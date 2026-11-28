@@ -78,22 +78,51 @@ function ensureLogin() {
   return Promise.reject(new Error('未登录'));
 }
 
-function decodeChunk(buf) {
-  try {
-    if (typeof TextDecoder !== 'undefined') {
-      return new TextDecoder('utf-8').decode(buf);
+function toUint8(buf) {
+  if (!buf || typeof buf === 'string') return null;
+  if (typeof Uint8Array !== 'undefined' && buf instanceof Uint8Array) return buf;
+  if (buf instanceof ArrayBuffer) return new Uint8Array(buf);
+  if (typeof buf.byteLength === 'number') {
+    try {
+      return new Uint8Array(buf);
+    } catch (e) {
+      return null;
     }
-  } catch (e) {
-    /* ignore */
   }
-  try {
-    const arr = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
-    let s = '';
-    for (let i = 0; i < arr.length; i++) s += String.fromCharCode(arr[i]);
-    return decodeURIComponent(escape(s));
-  } catch (e2) {
-    return '';
+  return null;
+}
+
+/** 同一次请求共用一个解码器，避免分片把中文从字节中间切开。 */
+function createStreamDecoder() {
+  let decoder = null;
+  if (typeof TextDecoder !== 'undefined') {
+    try {
+      decoder = new TextDecoder('utf-8');
+    } catch (e) {
+      decoder = null;
+    }
   }
+  return {
+    decode(buf, flush) {
+      if (typeof buf === 'string') return buf;
+      const bytes = toUint8(buf);
+      if (decoder) {
+        try {
+          return decoder.decode(bytes || new Uint8Array(0), { stream: !flush });
+        } catch (e) {
+          /* fall through */
+        }
+      }
+      if (!bytes || !bytes.length) return '';
+      let s = '';
+      for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+      try {
+        return decodeURIComponent(escape(s));
+      } catch (e2) {
+        return '';
+      }
+    }
+  };
 }
 
 /**
@@ -114,15 +143,19 @@ function requestStream({ url, method = 'POST', data = {}, onEvent }) {
     let settled = false;
     let gotChunk = false;
     let donePayload = null;
+    let tailTimer = null;
+    const streamDecoder = createStreamDecoder();
 
     const finishOk = (payload) => {
       if (settled) return;
       settled = true;
+      if (tailTimer) clearTimeout(tailTimer);
       resolve(payload);
     };
     const finishErr = (err) => {
       if (settled) return;
       settled = true;
+      if (tailTimer) clearTimeout(tailTimer);
       reject(err instanceof Error ? err : new Error(String(err || '请求失败')));
     };
 
@@ -142,8 +175,38 @@ function requestStream({ url, method = 'POST', data = {}, onEvent }) {
           /* ignore ui errors */
         }
       }
-      if (ev.event === 'done') donePayload = ev.data;
+      if (ev.event === 'done') {
+        donePayload = ev.data;
+        finishOk(donePayload);
+      }
       if (ev.event === 'error') finishErr(ev.message || '失败');
+    };
+
+    const salvage = (data) => {
+      if (donePayload || settled || data == null || data === '') return;
+      let text = '';
+      if (typeof data === 'string') text = data;
+      else if (toUint8(data)) {
+        try {
+          text = new TextDecoder('utf-8').decode(toUint8(data));
+        } catch (e) {
+          text = '';
+        }
+      } else if (typeof data === 'object' && data.event) {
+        handleLine(JSON.stringify(data));
+        return;
+      } else if (typeof data === 'object' && data.goal) {
+        finishOk(data);
+        return;
+      } else {
+        return;
+      }
+      text.split('\n').forEach((line) => {
+        const t = (line || '').trim();
+        if (!t || t.charAt(0) !== '{') return;
+        if (t.indexOf('"done"') < 0 && t.indexOf('"error"') < 0) return;
+        handleLine(t);
+      });
     };
 
     const consume = (chunkText) => {
@@ -161,36 +224,33 @@ function requestStream({ url, method = 'POST', data = {}, onEvent }) {
       timeout: Math.max(config.requestTimeout || 120000, 180000),
       enableChunked: true,
       success(res) {
-        if (buffer) {
-          handleLine(buffer);
-          buffer = '';
-        }
-        // 部分环境不触发 chunk，整包在 success
+        // 开发者工具经常不回调 onChunkReceived，整包在 success
         if (!gotChunk && res && res.data) {
-          if (typeof res.data === 'string') {
-            consume(res.data);
-          } else if (typeof res.data === 'object' && res.data.event) {
-            handleLine(JSON.stringify(res.data));
-          } else if (typeof res.data === 'object' && res.data.goal) {
-            // 兼容非流式回落
-            finishOk(res.data);
-            return;
-          }
+          if (typeof res.data === 'string') consume(res.data);
+          else salvage(res.data);
+        } else if (res && res.data) {
+          salvage(res.data);
         }
-        if (donePayload) {
-          finishOk(donePayload);
-          return;
-        }
-        if (res.statusCode >= 200 && res.statusCode < 300 && !settled) {
-          finishErr('流式响应未完成');
-          return;
-        }
-        if (!settled) {
+        if (donePayload || settled) return;
+        if (!(res.statusCode >= 200 && res.statusCode < 300)) {
           const detail =
             (res.data && (res.data.detail || res.data.message)) ||
             `HTTP ${res.statusCode}`;
           finishErr(detail);
+          return;
         }
+        // 最后一片可能晚于 success；未收齐前不要把半行丢掉
+        tailTimer = setTimeout(() => {
+          if (settled) return;
+          const rest = streamDecoder.decode(null, true);
+          if (rest) consume(rest);
+          if (buffer) {
+            handleLine(buffer);
+            buffer = '';
+          }
+          if (donePayload) finishOk(donePayload);
+          else finishErr('流式响应未完成');
+        }, 600);
       },
       fail(err) {
         finishErr((err && err.errMsg) || '网络错误');
@@ -200,10 +260,7 @@ function requestStream({ url, method = 'POST', data = {}, onEvent }) {
     if (task && typeof task.onChunkReceived === 'function') {
       task.onChunkReceived((res) => {
         gotChunk = true;
-        consume(decodeChunk(res.data));
-        if (donePayload && !settled) {
-          // 等 success 再 resolve，避免半包；若长时间无 success，下面保险
-        }
+        consume(streamDecoder.decode(res && res.data, false));
       });
     }
   });
