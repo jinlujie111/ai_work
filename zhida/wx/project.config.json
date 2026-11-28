@@ -48,6 +48,8 @@
   "libVersion": "3.5.5",
   "appid": "wx335532634164aa43",
   "projectname": "zhida",
+  "miniprogramRoot": "./",
+  "srcMiniprogramRoot": "./",
   "condition": {},
   "editorSetting": {
     "tabIndent": "insertSpaces",

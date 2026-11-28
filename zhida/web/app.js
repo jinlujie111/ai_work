@@ -35,6 +35,11 @@
 
   function apiBase() {
     if (location.protocol === "file:") return "http://127.0.0.1:8002";
+    // 页面在 /ai_work/xuexi/ops/ 时，接口必须走 /ai_work/xuexi/api/...
+    // 若写成 ""，会请求到域名根 /api/...（被别的站点吃掉）
+    const path = location.pathname || "";
+    const opsAt = path.lastIndexOf("/ops");
+    if (opsAt > 0) return path.slice(0, opsAt).replace(/\/$/, "");
     return "";
   }
 

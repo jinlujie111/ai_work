@@ -86,14 +86,16 @@ def require_admin(
 @router.post("/login")
 def ops_login(body: OpsLoginIn):
     settings = get_settings()
+    # .env 常见尾部空格 / \r；两端都 strip，避免「明明输对却失败」
     user = (settings.admin_username or "").strip()
-    pwd = settings.admin_password or ""
+    pwd = (settings.admin_password or "").strip()
     if not user or not pwd:
         raise HTTPException(status_code=503, detail="admin login not configured")
-    u_in = body.username.strip()
+    u_in = (body.username or "").strip()
+    p_in = (body.password or "").strip()
     # 等长比较，避免长度差异触发 compare_digest 异常
-    ok_user = len(u_in) == len(user) and secrets.compare_digest(u_in, user)
-    ok_pwd = len(body.password) == len(pwd) and secrets.compare_digest(body.password, pwd)
+    ok_user = len(u_in) == len(user) and secrets.compare_digest(u_in.encode("utf-8"), user.encode("utf-8"))
+    ok_pwd = len(p_in) == len(pwd) and secrets.compare_digest(p_in.encode("utf-8"), pwd.encode("utf-8"))
     if not (ok_user and ok_pwd):
         raise HTTPException(status_code=401, detail="invalid username or password")
     token = _issue_ops_token(user)
