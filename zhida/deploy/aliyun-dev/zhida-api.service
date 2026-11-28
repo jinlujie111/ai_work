@@ -1,0 +1,19 @@
+[Unit]
+Description=Zhida (学习者) API · aliyun-dev
+After=network.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/ai_work/zhida/server
+Environment=PYTHONUNBUFFERED=1
+# .env 位于 /opt/ai_work/zhida/.env（server/app/config.py 向上两级）
+ExecStart=/opt/ai_work/zhida/server/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 7102 --workers 2
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
