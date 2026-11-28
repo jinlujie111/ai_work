@@ -11,8 +11,9 @@ module.exports = {
   appName: '学习者',
   slogan: '拆模块，日日推进',
 
-  // 开发者工具可访问本机；真机调试请改成电脑局域网 IP，如 http://192.168.1.8:8000
-  apiBase: 'http://127.0.0.1:8002',
+  // 本地：http://127.0.0.1:8002（开发者工具勾选不校验合法域名）
+  // 阿里云开发版：https://instockdetail.com/ai_work/xuexi
+  apiBase: 'https://instockdetail.com/ai_work/xuexi',
 
   // 与微信公众平台一致（公开信息）。密钥 WX_SECRET 只在 zhida/.env
   wxAppId: 'wx335532634164aa43',

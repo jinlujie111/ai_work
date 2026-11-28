@@ -1,0 +1,65 @@
+<view class="qa-mask" wx:if="{{open}}" catchtouchmove="noop" bindtap="onClose">
+  <view class="qa" catchtap="noop">
+    <view class="qa__grip" aria-hidden="true"></view>
+
+    <view class="qa__top">
+      <view class="qa__badge">收集箱</view>
+      <view class="qa__x" hover-class="qa__x--press" bindtap="onClose">✕</view>
+    </view>
+
+    <textarea
+      class="qa__compose"
+      focus="{{open}}"
+      maxlength="120"
+      auto-height
+      show-confirm-bar="{{false}}"
+      adjust-position="{{true}}"
+      cursor-spacing="24"
+      placeholder="想做什么？"
+      placeholder-class="qa__compose-ph"
+      value="{{name}}"
+      bindinput="onName"
+      confirm-type="done"
+      bindconfirm="onConfirm"
+    />
+
+    <view class="qa__dates">
+      <view
+        class="qa__pill {{dateKey === 'today' ? 'qa__pill--on' : ''}}"
+        hover-class="qa__pill--press"
+        data-key="today"
+        bindtap="onPickKey"
+      >今天</view>
+      <view
+        class="qa__pill {{dateKey === 'tomorrow' ? 'qa__pill--on' : ''}}"
+        hover-class="qa__pill--press"
+        data-key="tomorrow"
+        bindtap="onPickKey"
+      >明天</view>
+      <picker
+        mode="date"
+        value="{{pickerValue}}"
+        start="{{pickerStart}}"
+        end="{{pickerEnd}}"
+        bindchange="onDatePicked"
+      >
+        <view
+          class="qa__pill qa__pill--cal {{dateKey === 'custom' ? 'qa__pill--on' : ''}}"
+          hover-class="qa__pill--press"
+        >
+          <text class="qa__cal-ico">日</text>
+          <text>{{dateKey === 'custom' ? pickerValue : '选日期'}}</text>
+        </view>
+      </picker>
+    </view>
+
+    <view class="qa__bar">
+      <view class="qa__ghost" hover-class="qa__ghost--press" bindtap="onClose">取消</view>
+      <view
+        class="qa__go {{!canSubmit || saving ? 'qa__go--dim' : ''}}"
+        hover-class="{{canSubmit && !saving ? 'qa__go--press' : ''}}"
+        bindtap="onConfirm"
+      >{{saving ? '添加中' : '添加'}}</view>
+    </view>
+  </view>
+</view>
